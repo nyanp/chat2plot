@@ -32,10 +32,10 @@ xlabel: (optional) label of x-axis.
 ylabel: (optional) label of y-axis.
 order_by: (optional) the order of x-axis, should be one of [name, value].
 
-If a transform is needed for a column used for a measure or dimension, the following transform functions can be used instead of specifying the column directly.
+If a transform is needed for a column used for a measure or dimension, one of the following transform functions can be used instead of specifying the column directly.
 
-BINNING(column, interval): binning a numerical column to the specified interval.
-ROUND(column, period): binning a date/datetime column to the specified period. period should be one of [day, week, month, year].
+BINNING(column, interval): binning a numerical column to the specified interval. interval should be integer. example: BINNING(x, 10)
+ROUND_DATETIME(column, period): binning a date/datetime column to the specified period. period should be one of [day, week, month, year]. example: ROUND(x, year)
 
 The user's question may be an instruction to fine-tune the previous chart, or it may be an instruction to create a new chart based on a completely new context. In the latter case, be careful not to use the context used for the previous chart.
 
@@ -62,12 +62,17 @@ class Chat2PlotConfig:
         df: pd.DataFrame,
         chat: BaseChatModel | None = None,
         prompt: str | None = None,
+        verbose: bool = False
     ):
         self._df = df
         self._conversation_history: list[BaseMessage] = []
         self._chat = chat or ChatOpenAI(temperature=0, model_name="gpt-4")  # type: ignore
         self._first_prompt = prompt or _PROMPT
         self._second_prompt = "User Question: <{text}>"
+        self._verbose = verbose
+
+    def set_chatmodel(self, chat: BaseChatModel) -> None:
+        self._chat = chat
 
     def query(self, q: str) -> LLMResponse:
         if not self._conversation_history:
@@ -78,6 +83,9 @@ class Chat2PlotConfig:
 
         res = self._query(prompt)
 
+        if self._verbose:
+            _logger.info(res.content)
+
         return self._parse_response(res.content)
 
     def _parse_response(self, content: str) -> LLMResponse:
@@ -86,7 +94,8 @@ class Chat2PlotConfig:
 
         try:
             config = PlotConfig.from_json(json.loads(content))
-            print(config)
+            if self._verbose:
+                _logger.info(config)
             return LLMResponse(ResponseType.CHART, config)
         except Exception:
             raise RuntimeError(f"Invalid response: {content}")  # TODO
@@ -99,10 +108,13 @@ class Chat2PlotConfig:
 
 
 class Chat2Plot:
-    def __init__(self, df: pd.DataFrame, chat: BaseChatModel | None = None):
-        self._config_generator = Chat2PlotConfig(df, chat)
+    def __init__(self, df: pd.DataFrame, chat: BaseChatModel | None = None, verbose: bool = False):
+        self._config_generator = Chat2PlotConfig(df, chat, verbose=verbose)
         self.df = df
         self._config_history: list[PlotConfig] = []
+
+    def set_chatmodel(self, chat: BaseChatModel) -> None:
+        self._config_generator.set_chatmodel(chat)
 
     def query(self, q: str) -> Plot:
         res = self._config_generator.query(q)
