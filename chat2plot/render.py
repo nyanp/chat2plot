@@ -6,6 +6,21 @@ from chat2plot.schema import AggregationType, AxisOrder, ChartType, Filter, Plot
 from chat2plot.transform import transform
 
 
+def _ax_config(config: PlotConfig, x: str, y: str) -> dict[str, str | dict[str, str]]:
+    ax = {"x": x, "y": y}
+    labels = {}
+
+    if config.xlabel:
+        labels[x] = config.xlabel
+    if config.ylabel:
+        labels[y] = config.ylabel
+
+    if labels:
+        ax["labels"] = labels
+
+    return ax
+
+
 def draw_plotly(df: pd.DataFrame, config: PlotConfig) -> Figure:
     df_filtered = filter_data(df, config.filters).copy()
     df_filtered = transform(df, config)
@@ -24,17 +39,15 @@ def draw_plotly(df: pd.DataFrame, config: PlotConfig) -> Figure:
 
         fig = px.bar(
             agg,
-            x=x,
-            y=y,
             color=config.hue.column if config.hue else None,
             orientation=orientation,
+            **_ax_config(config, x, y),
         )
     elif chart_type == ChartType.SCATTER:
         fig = px.scatter(
             df_filtered,
-            x=config.measures[0].column,
-            y=config.measures[1].column,
             color=config.hue.column if config.hue else None,
+            **_ax_config(config, config.measures[0].column, config.measures[1].column),
         )
     elif chart_type == ChartType.PIE:
         agg = groupby_agg(df_filtered, config)
@@ -44,14 +57,17 @@ def draw_plotly(df: pd.DataFrame, config: PlotConfig) -> Figure:
 
         if is_aggregation(config):
             agg = groupby_agg(df_filtered, config)
-            fig = func_table[chart_type](agg, x=agg.columns[0], y=agg.columns[-1])
+            fig = func_table[chart_type](
+                agg, **_ax_config(config, agg.columns[0], y=agg.columns[-1])
+            )
         else:
             assert config.dimension is not None
             fig = func_table[chart_type](
                 df_filtered,
-                x=config.dimension.column,
-                y=config.measures[0].column,
                 color=config.hue.column if config.hue else None,
+                **_ax_config(
+                    config, config.dimension.column, config.measures[0].column
+                ),
             )
     else:
         raise ValueError(f"Unknown chart_type: {chart_type}")
