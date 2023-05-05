@@ -1,3 +1,4 @@
 langchain>=0.0.127
 pandas>=1.5.0
 plotly>=5.0.0
+streamlit-chat>=0.0.2.2
