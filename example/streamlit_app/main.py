@@ -8,7 +8,7 @@ import streamlit as st
 from streamlit_chat import message
 from langchain.chat_models import ChatOpenAI
 
-sys.path.append("../")
+sys.path.append("../../")
 
 from chat2plot import Chat2Plot
 
