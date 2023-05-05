@@ -90,12 +90,22 @@ class PlotConfig:
     def from_json(cls, json_data: dict[str, Any]) -> "PlotConfig":
         assert "chart_type" in json_data
         assert "dimension" in json_data
+
+        def wrap_if_not_list(value: str | list[str]) -> list[str]:
+            if not isinstance(value, list):
+                return [value]
+            else:
+                return value
+
         chart_type = ChartType(json_data["chart_type"])
-        measures = [Measure.from_text(m) for m in json_data.get("measures", [])]
+        measures = [
+            Measure.from_text(m)
+            for m in wrap_if_not_list(json_data.get("measures", []))
+        ]
         dimension = (
             Dimension(json_data["dimension"]) if json_data.get("dimension") else None
         )
-        filters = [Filter(q) for q in json_data.get("filters", [])]
+        filters = [Filter(q) for q in wrap_if_not_list(json_data.get("filters", []))]
 
         return cls(
             chart_type,
