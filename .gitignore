@@ -1,0 +1,5 @@
+.mypy_cache/
+.python-version
+.ipynb_checkpoints
+notebooks/
+**/__pycache__/
