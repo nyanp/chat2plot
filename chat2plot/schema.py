@@ -28,6 +28,11 @@ class ResponseType(Enum):
     UNKNOWN = "unknown"
 
 
+class AxisOrder(Enum):
+    NAME = "name"
+    VALUE = "value"
+
+
 @dataclass(frozen=True)
 class Measure:
     column: str
@@ -72,6 +77,14 @@ class PlotConfig:
     ymax: float | None = None
     xlabel: str | None = None
     ylabel: str | None = None
+    order_by: AxisOrder | None = None
+
+    @property
+    def required_columns(self) -> list[str]:
+        columns = [m.column for m in self.measures]
+        if self.dimension:
+            columns.append(self.dimension.column)
+        return columns
 
     @classmethod
     def from_json(cls, json_data: dict[str, Any]) -> "PlotConfig":
@@ -96,6 +109,7 @@ class PlotConfig:
             json_data.get("ymax"),
             json_data.get("xlabel"),
             json_data.get("ylabel"),
+            AxisOrder(json_data["order_by"]) if json_data.get("order_by") else None,
         )
 
 

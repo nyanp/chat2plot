@@ -1,4 +1,7 @@
 import json
+from dataclasses import dataclass
+from logging import getLogger
+from typing import Any
 
 import pandas as pd
 from langchain.chat_models import ChatOpenAI
@@ -8,6 +11,8 @@ from langchain.schema import BaseMessage, HumanMessage
 from chat2plot.dataset_description import description
 from chat2plot.render import draw_plotly
 from chat2plot.schema import LLMResponse, PlotConfig, ResponseType
+
+_logger = getLogger(__name__)
 
 _PROMPT = """
 Your task is to generate chart configuration for the given dataset and user question delimited by <>.
@@ -25,6 +30,12 @@ ymin: (optional) minimum value of y-axis.
 ymax: (optional) maximum value of y-axis.
 xlabel: (optional) label of x-axis.
 ylabel: (optional) label of y-axis.
+order_by: (optional) the order of x-axis, should be one of [name, value].
+
+If a transform is needed for a column used for a measure or dimension, the following transform functions can be used instead of specifying the column directly.
+
+BINNING(column, interval): binning a numerical column to the specified interval.
+ROUND(column, period): binning a date/datetime column to the specified period. period should be one of [day, week, month, year].
 
 The user's question may be an instruction to fine-tune the previous chart, or it may be an instruction to create a new chart based on a completely new context. In the latter case, be careful not to use the context used for the previous chart.
 
@@ -37,6 +48,12 @@ Dataset contains the following contents:
 
 User Question: <{text}>
 """
+
+
+@dataclass
+class Plot:
+    plot: Any
+    response: ResponseType
 
 
 class Chat2PlotConfig:
@@ -69,9 +86,10 @@ class Chat2PlotConfig:
 
         try:
             config = PlotConfig.from_json(json.loads(content))
+            print(config)
             return LLMResponse(ResponseType.CHART, config)
         except Exception:
-            raise  # TODO
+            raise RuntimeError(f"Invalid response: {content}")  # TODO
 
     def _query(self, prompt: str) -> BaseMessage:
         self._conversation_history.append(HumanMessage(content=prompt))
@@ -86,16 +104,16 @@ class Chat2Plot:
         self.df = df
         self._config_history: list[PlotConfig] = []
 
-    def query(self, q: str) -> ResponseType:
+    def query(self, q: str) -> Plot:
         res = self._config_generator.query(q)
         if res.response_type == ResponseType.CHART:
             assert res.config is not None
             self._config_history.append(res.config)
-            self.render(self.df, res.config)
-        return res.response_type
+            return Plot(self.render(self.df, res.config), res.response_type)
+        return Plot(None, res.response_type)
 
-    def __call__(self, q: str) -> ResponseType:
+    def __call__(self, q: str) -> Plot:
         return self.query(q)
 
-    def render(self, df: pd.DataFrame, config: PlotConfig) -> None:
-        draw_plotly(df, config)
+    def render(self, df: pd.DataFrame, config: PlotConfig) -> Any:
+        return draw_plotly(df, config)

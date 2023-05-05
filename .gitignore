@@ -2,4 +2,5 @@
 .python-version
 .ipynb_checkpoints
 notebooks/
+apps/
 **/__pycache__/

@@ -1,11 +1,14 @@
 import pandas as pd
 import plotly.express as px
+from plotly.graph_objs import Figure
 
-from chat2plot.schema import AggregationType, ChartType, Filter, PlotConfig
+from chat2plot.schema import AggregationType, AxisOrder, ChartType, Filter, PlotConfig
+from chat2plot.transform import transform
 
 
-def draw_plotly(df: pd.DataFrame, config: PlotConfig) -> None:
-    df_filtered = filter_data(df, config.filters)
+def draw_plotly(df: pd.DataFrame, config: PlotConfig) -> Figure:
+    df_filtered = filter_data(df, config.filters).copy()
+    df_filtered = transform(df, config)
 
     chart_type = config.chart_type
 
@@ -41,17 +44,19 @@ def draw_plotly(df: pd.DataFrame, config: PlotConfig) -> None:
 
         if is_aggregation(config):
             agg = groupby_agg(df_filtered, config)
-            func_table[chart_type](agg, x=agg.columns[0], y=agg.columns[-1])
+            fig = func_table[chart_type](agg, x=agg.columns[0], y=agg.columns[-1])
         else:
             assert config.dimension is not None
-            func_table[chart_type](
+            fig = func_table[chart_type](
                 df_filtered,
                 x=config.dimension.column,
                 y=config.measures[0].column,
                 color=config.hue.column if config.hue else None,
             )
+    else:
+        raise ValueError(f"Unknown chart_type: {chart_type}")
 
-    fig.show()
+    return fig
 
 
 def groupby_agg(df: pd.DataFrame, config: PlotConfig) -> pd.DataFrame:
@@ -79,12 +84,17 @@ def groupby_agg(df: pd.DataFrame, config: PlotConfig) -> pd.DataFrame:
             {str(m): [df[m.column].agg(agg_method[m.aggregation_method])]}
         )
     else:
-        return (
+        agg = (
             df.groupby(group_by, dropna=False)[m.column]
             .agg(agg_method[m.aggregation_method])
             .rename(str(m))
-            .reset_index()
         )
+        if config.order_by == AxisOrder.NAME:
+            agg = agg.sort_index()
+        elif config.order_by == AxisOrder.VALUE:
+            agg = agg.sort_values(ascending=False)
+
+        return agg.reset_index()
 
 
 def is_aggregation(config: PlotConfig) -> bool:
