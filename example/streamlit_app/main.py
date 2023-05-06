@@ -1,18 +1,17 @@
+import logging
 import os
 import sys
-import logging
 
 import pandas as pd
 import streamlit as st
-
-from streamlit_chat import message
 from langchain.chat_models import ChatOpenAI
+from streamlit_chat import message
 
 sys.path.append("../../")
 
 from chat2plot import Chat2Plot
 
-logger = logging.getLogger('root')
+logger = logging.getLogger("root")
 handler = logging.StreamHandler(sys.stdout)
 logger.setLevel(logging.INFO)
 logger.addHandler(handler)
@@ -31,7 +30,18 @@ if api_key and csv_file:
     df = pd.read_csv(csv_file)
 
     st.write(df.head())
-    model_name = st.selectbox("Step3: Choose model type", ("gpt-3.5-turbo", "gpt-3.5-turbo-0301", "gpt-4", "gpt-4-0314", "gpt-4-32k", "gpt-4-32k-0314"), index=0)
+    model_name = st.selectbox(
+        "Step3: Choose model type",
+        (
+            "gpt-3.5-turbo",
+            "gpt-3.5-turbo-0301",
+            "gpt-4",
+            "gpt-4-0314",
+            "gpt-4-32k",
+            "gpt-4-32k-0314",
+        ),
+        index=0,
+    )
 
     if "generated" not in st.session_state:
         st.session_state["generated"] = []
@@ -56,7 +66,7 @@ if api_key and csv_file:
 
     if user_input:
         with st.spinner(text="Wait for LLM response..."):
-            res = c2p(user_input)
+            res = c2p(user_input, show_plot=False)
         plot = res.plot
         response_type = res.response
 

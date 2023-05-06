@@ -62,7 +62,7 @@ class Chat2PlotConfig:
         df: pd.DataFrame,
         chat: BaseChatModel | None = None,
         prompt: str | None = None,
-        verbose: bool = False
+        verbose: bool = False,
     ):
         self._df = df
         self._conversation_history: list[BaseMessage] = []
@@ -108,7 +108,9 @@ class Chat2PlotConfig:
 
 
 class Chat2Plot:
-    def __init__(self, df: pd.DataFrame, chat: BaseChatModel | None = None, verbose: bool = False):
+    def __init__(
+        self, df: pd.DataFrame, chat: BaseChatModel | None = None, verbose: bool = False
+    ):
         self._config_generator = Chat2PlotConfig(df, chat, verbose=verbose)
         self.df = df
         self._config_history: list[PlotConfig] = []
@@ -116,16 +118,16 @@ class Chat2Plot:
     def set_chatmodel(self, chat: BaseChatModel) -> None:
         self._config_generator.set_chatmodel(chat)
 
-    def query(self, q: str) -> Plot:
+    def query(self, q: str, show_plot: bool = True) -> Plot:
         res = self._config_generator.query(q)
         if res.response_type == ResponseType.CHART:
             assert res.config is not None
             self._config_history.append(res.config)
-            return Plot(self.render(self.df, res.config), res.response_type)
+            return Plot(self.render(self.df, res.config, show_plot), res.response_type)
         return Plot(None, res.response_type)
 
-    def __call__(self, q: str) -> Plot:
-        return self.query(q)
+    def __call__(self, q: str, show_plot: bool = True) -> Plot:
+        return self.query(q, show_plot)
 
-    def render(self, df: pd.DataFrame, config: PlotConfig) -> Any:
-        return draw_plotly(df, config)
+    def render(self, df: pd.DataFrame, config: PlotConfig, show_plot: bool = True) -> Any:
+        return draw_plotly(df, config, show_plot)

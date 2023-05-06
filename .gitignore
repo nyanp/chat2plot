@@ -4,3 +4,4 @@
 notebooks/
 apps/
 **/__pycache__/
+*.egg-info/
