@@ -8,6 +8,7 @@ import pandas as pd
 import streamlit as st
 from langchain.chat_models import ChatOpenAI
 from plotly.graph_objs import Figure
+from streamlit_chat import message
 
 sys.path.append("../../")
 
