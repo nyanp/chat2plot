@@ -32,11 +32,6 @@ def dynamic_install(module):
 
 # https://python.plainenglish.io/how-to-install-your-own-private-github-package-on-streamlit-cloud-eb3aaed9b179
 try:
-    from streamlit_chat import message
-except ModuleNotFoundError:
-    dynamic_install("streamlit-chat>=0.0.2.2")
-
-try:
     from chat2plot import ResponseType, chat2plot
 except ModuleNotFoundError:
     github_token = st.secrets["github_token"]
