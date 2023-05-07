@@ -1,14 +1,26 @@
+import copy
+from typing import Any
+
+import altair as alt
 import pandas as pd
 import plotly.express as px
+from altair.utils.data import to_values
 from plotly.graph_objs import Figure
 
-from chat2plot.schema import AggregationType, AxisOrder, ChartType, Filter, PlotConfig
+from chat2plot.schema import (
+    AggregationType,
+    ChartType,
+    Filter,
+    PlotConfig,
+    SortingCriteria,
+    SortOrder,
+)
 from chat2plot.transform import transform
 
 
 def _ax_config(config: PlotConfig, x: str, y: str) -> dict[str, str | dict[str, str]]:
-    ax = {"x": x, "y": y}
-    labels = {}
+    ax: dict[str, str | dict[str, str]] = {"x": x, "y": y}
+    labels: dict[str, str] = {}
 
     if config.xlabel:
         labels[x] = config.xlabel
@@ -21,7 +33,7 @@ def _ax_config(config: PlotConfig, x: str, y: str) -> dict[str, str | dict[str, 
     return ax
 
 
-def draw_plotly(df: pd.DataFrame, config: PlotConfig) -> Figure:
+def draw_plotly(df: pd.DataFrame, config: PlotConfig, show: bool = True) -> Figure:
     df_filtered = filter_data(df, config.filters).copy()
     df_filtered = transform(df, config)
 
@@ -72,7 +84,22 @@ def draw_plotly(df: pd.DataFrame, config: PlotConfig) -> Figure:
     else:
         raise ValueError(f"Unknown chart_type: {chart_type}")
 
+    if show:
+        fig.show()
+
     return fig
+
+
+def draw_altair(
+    df: pd.DataFrame, config: dict[str, Any], show: bool = True
+) -> alt.Chart:
+    spec = copy.deepcopy(config)
+    spec["data"] = to_values(df)
+    chart = alt.Chart.from_dict(spec)
+    if show:
+        chart.show()
+
+    return chart
 
 
 def groupby_agg(df: pd.DataFrame, config: PlotConfig) -> pd.DataFrame:
@@ -105,10 +132,12 @@ def groupby_agg(df: pd.DataFrame, config: PlotConfig) -> pd.DataFrame:
             .agg(agg_method[m.aggregation_method])
             .rename(str(m))
         )
-        if config.order_by == AxisOrder.NAME:
-            agg = agg.sort_index()
-        elif config.order_by == AxisOrder.VALUE:
-            agg = agg.sort_values(ascending=False)
+        ascending = config.sort_order == SortOrder.ASC
+
+        if config.sort_criteria == SortingCriteria.NAME:
+            agg = agg.sort_index(ascending=ascending)
+        elif config.sort_criteria == SortingCriteria.VALUE:
+            agg = agg.sort_values(ascending=ascending)
 
         return agg.reset_index()
 

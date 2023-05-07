@@ -23,14 +23,20 @@ class AggregationType(Enum):
 
 
 class ResponseType(Enum):
-    CHART = "chart"
+    SUCCESS = "success"
     NOT_RELATED = "not related"
     UNKNOWN = "unknown"
+    FAILED_TO_RENDER = "failed to render"
 
 
-class AxisOrder(Enum):
+class SortingCriteria(Enum):
     NAME = "name"
     VALUE = "value"
+
+
+class SortOrder(Enum):
+    ASC = "asc"
+    DESC = "desc"
 
 
 @dataclass(frozen=True)
@@ -77,7 +83,8 @@ class PlotConfig:
     ymax: float | None = None
     xlabel: str | None = None
     ylabel: str | None = None
-    order_by: AxisOrder | None = None
+    sort_criteria: SortingCriteria | None = None
+    sort_order: SortOrder | None = None
 
     @property
     def required_columns(self) -> list[str]:
@@ -93,7 +100,7 @@ class PlotConfig:
 
         def wrap_if_not_list(value: str | list[str]) -> list[str]:
             if not isinstance(value, list):
-                return [value]
+                return [] if value is None else [value]
             else:
                 return value
 
@@ -119,7 +126,10 @@ class PlotConfig:
             json_data.get("ymax"),
             json_data.get("xlabel"),
             json_data.get("ylabel"),
-            AxisOrder(json_data["order_by"]) if json_data.get("order_by") else None,
+            SortingCriteria(json_data["sort_criteria"])
+            if json_data.get("sort_criteria")
+            else None,
+            SortOrder(json_data["sort_order"]) if json_data.get("sort_order") else None,
         )
 
 

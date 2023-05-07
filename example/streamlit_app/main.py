@@ -1,15 +1,40 @@
 import logging
 import os
+import subprocess
 import sys
+import time
 
 import pandas as pd
 import streamlit as st
 from langchain.chat_models import ChatOpenAI
-from streamlit_chat import message
+from plotly.graph_objs import Figure
 
 sys.path.append("../../")
 
-from chat2plot import Chat2Plot
+
+def dynamic_install(module):
+    sleep_time = 30
+    dependency_warning = st.warning(
+        f"Installing dependencies, this takes {sleep_time} seconds."
+    )
+    subprocess.Popen([f"{sys.executable} -m pip install {module}"], shell=True)
+    # wait for subprocess to install package before running your actual code below
+    time.sleep(sleep_time)
+    # remove the installing dependency warning
+    dependency_warning.empty()
+
+
+# https://python.plainenglish.io/how-to-install-your-own-private-github-package-on-streamlit-cloud-eb3aaed9b179
+try:
+    from streamlit_chat import message
+except ModuleNotFoundError:
+    dynamic_install("streamlit-chat>=0.0.2.2")
+
+try:
+    from chat2plot import ResponseType, chat2plot
+except ModuleNotFoundError:
+    dynamic_install("git+https://${{github_token}}@github.com/nyanp/chat2plot.git")
+
 
 logger = logging.getLogger("root")
 handler = logging.StreamHandler(sys.stdout)
@@ -30,8 +55,16 @@ if api_key and csv_file:
     df = pd.read_csv(csv_file)
 
     st.write(df.head())
+
+    if "generated" not in st.session_state:
+        st.session_state["generated"] = []
+
+    if "past" not in st.session_state:
+        st.session_state["past"] = []
+
+    st.subheader("Chat")
     model_name = st.selectbox(
-        "Step3: Choose model type",
+        "Model type",
         (
             "gpt-3.5-turbo",
             "gpt-3.5-turbo-0301",
@@ -43,20 +76,25 @@ if api_key and csv_file:
         index=0,
     )
 
-    if "generated" not in st.session_state:
-        st.session_state["generated"] = []
+    def initialize_c2p():
+        st.session_state["chat"] = chat2plot(
+            df, st.session_state["chart_format"], verbose=True
+        )
 
-    if "past" not in st.session_state:
-        st.session_state["past"] = []
+    chart_format = st.selectbox(
+        "Chart format",
+        ("default", "vega"),
+        key="chart_format",
+        index=0,
+        on_change=initialize_c2p,
+    )
 
     if "chat" not in st.session_state:
-        st.session_state["chat"] = Chat2Plot(df, verbose=True)
+        initialize_c2p()
 
     c2p = st.session_state["chat"]
 
-    c2p.set_chatmodel(ChatOpenAI(temperature=0, model_name=model_name))
-
-    st.subheader("Chat")
+    c2p.session.set_chatmodel(ChatOpenAI(temperature=0, model_name=model_name))
 
     def get_text():
         input_text = st.text_input("You: ", key="input")
@@ -67,20 +105,26 @@ if api_key and csv_file:
     if user_input:
         with st.spinner(text="Wait for LLM response..."):
             res = c2p(user_input, show_plot=False)
-        plot = res.plot
-        response_type = res.response
+        response_type = res.response_type
 
         st.session_state.past.append(user_input)
-        if plot is not None:
-            st.session_state.generated.append(plot)
-        else:
-            st.session_state.generated.append(str(response_type.value))
+        st.session_state.generated.append(res)
 
     if st.session_state["generated"]:
         for i in range(len(st.session_state["generated"]) - 1, -1, -1):
-            if isinstance(st.session_state["generated"][i], str):
-                message(st.session_state["generated"][i], key=str(i))
+            res = st.session_state["generated"][i]
+            if res.response_type == ResponseType.NOT_RELATED:
+                message(
+                    "This chat accepts queries to visualize the given data. Please provide a question about the data.",
+                    key=str(i),
+                )
             else:
-                st.plotly_chart(st.session_state["generated"][i])
+                message(res.raw_response, key=str(i))
+
+            if res.response_type == ResponseType.SUCCESS:
+                if isinstance(res.figure, Figure):
+                    st.plotly_chart(res.figure)
+                else:
+                    st.vega_lite_chart(df, res.config, use_container_width=True)
 
             message(st.session_state["past"][i], is_user=True, key=str(i) + "_user")
