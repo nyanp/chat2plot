@@ -12,6 +12,12 @@ from plotly.graph_objs import Figure
 sys.path.append("../../")
 
 
+# From here down is all the StreamLit UI.
+st.set_page_config(page_title="Chat2Plot Demo", page_icon=":robot:")
+st.header("Chat2Plot Demo")
+st.subheader("Settings")
+
+
 def dynamic_install(module):
     sleep_time = 30
     dependency_warning = st.warning(
@@ -33,18 +39,14 @@ except ModuleNotFoundError:
 try:
     from chat2plot import ResponseType, chat2plot
 except ModuleNotFoundError:
-    dynamic_install("git+https://${{github_token}}@github.com/nyanp/chat2plot.git")
+    github_token = st.secrets["github_token"]
+    dynamic_install(f"git+https://{github_token}@github.com/nyanp/chat2plot.git")
 
 
 logger = logging.getLogger("root")
 handler = logging.StreamHandler(sys.stdout)
 logger.setLevel(logging.INFO)
 logger.addHandler(handler)
-
-# From here down is all the StreamLit UI.
-st.set_page_config(page_title="Chat2Plot Demo", page_icon=":robot:")
-st.header("Chat2Plot Demo")
-st.subheader("Settings")
 
 api_key = st.text_input("Step1: Input your OpenAI API-KEY", value="")
 csv_file = st.file_uploader("Step2: Upload csv file", type={"csv"})
