@@ -2,6 +2,8 @@
 
 Chat2plot is a project that provides visualizations based on chat instructions for given data.
 
+demo: https://chat2plot-sample.streamlit.app/
+
 ## Usage
 
 ```Python
@@ -22,26 +24,35 @@ c2p("average target over countries")
 
 c2p("change to horizontal-bar chart")
 
-cp2("...")
+c2p("...")
 ```
 
 ## Why Chat2Plpot
 
-Inside Chat2Plot, LLM does not generate Python code, but rather a declarative data structure representing the plot specification.
+Inside Chat2Plot, LLM does not generate Python code,
+but generates plot specifications in json.
 
-While this design has a lower capacity of plots that can be generated compared to Python code (e.g., ChatGPT's Code Interpreter Plugin), it has the following practical advantages:
+The declarative visualization specification in json is transformed into actual charts in 
+Chat2Plot using plotly or altair, but users can also use json directly in their own applications.
+
+This design limits the visualization expression compared to Python code generation 
+(such as ChatGPT's Code Interpreter Plugin), but has the following practical advantages:
 
 - Secure
     - More secure execution, as LLM does not directly generate code.
 
 - Language-independent
-    - Declarative data structures are language-independent, making it easy to plot in non-Python environments.
+    - Declarative data structures are language-agnostic, making it easy to plot in non-Python environments.
 
 - Interactive
     - Declarative data can be modified by the user to improve plots through collaborative work between the user and LLM.
 
-This declarative data structure can be chosen between default (simple dataclass) and the vega-lite format.
+The json schema can be selected from a default simple definition or a vega-lite compliant schema.
 
 ```Python
 c2p = chat2plot(df, "vega")  # use vega-lite format
+
+ret = c2p("plot x vs y")
+
+ret.config  # get vega-lite compliant json data
 ```
