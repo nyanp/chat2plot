@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Any
 
 
-class ChartType(Enum):
+class ChartType(str, Enum):
     PIE = "pie"
     SCATTER = "scatter"
     LINE = "line"
@@ -13,7 +13,7 @@ class ChartType(Enum):
     HORIZONTAL_BAR = "horizontal-bar"
 
 
-class AggregationType(Enum):
+class AggregationType(str, Enum):
     SUM = "SUM"
     AVG = "AVG"
     MIN = "MIN"
@@ -22,19 +22,19 @@ class AggregationType(Enum):
     DISTINCT_COUNT = "DISTINCT_COUNT"
 
 
-class ResponseType(Enum):
+class ResponseType(str, Enum):
     SUCCESS = "success"
     NOT_RELATED = "not related"
     UNKNOWN = "unknown"
     FAILED_TO_RENDER = "failed to render"
 
 
-class SortingCriteria(Enum):
+class SortingCriteria(str, Enum):
     NAME = "name"
     VALUE = "value"
 
 
-class SortOrder(Enum):
+class SortOrder(str, Enum):
     ASC = "asc"
     DESC = "desc"
 
@@ -100,7 +100,7 @@ class PlotConfig:
 
         def wrap_if_not_list(value: str | list[str]) -> list[str]:
             if not isinstance(value, list):
-                return [] if value is None else [value]
+                return [] if not value else [value]
             else:
                 return value
 

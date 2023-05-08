@@ -50,7 +50,7 @@ Dataset contains the following contents:
 
 {dataset}
 
-The output json must be enclosed in triple brackets.
+The output json must be enclosed in triple backquotes.
 """
 
 _PROMPT_VEGA = """
@@ -64,7 +64,7 @@ Dataset contains the following contents:
 
 {dataset}
 
-The output json must be enclosed in triple brackets.
+The output json must be enclosed in triple backquotes.
 """
 
 

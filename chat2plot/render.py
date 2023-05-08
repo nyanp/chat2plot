@@ -35,7 +35,7 @@ def _ax_config(config: PlotConfig, x: str, y: str) -> dict[str, str | dict[str, 
 
 def draw_plotly(df: pd.DataFrame, config: PlotConfig, show: bool = True) -> Figure:
     df_filtered = filter_data(df, config.filters).copy()
-    df_filtered = transform(df, config)
+    df_filtered = transform(df_filtered, config)
 
     chart_type = config.chart_type
 
