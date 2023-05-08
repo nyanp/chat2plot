@@ -102,6 +102,11 @@ if api_key and csv_file:
 
     user_input = get_text()
 
+    def reset_history():
+        initialize_c2p()
+        st.session_state["generated"] = []
+        st.session_state["past"] = []
+
     if user_input:
         with st.spinner(text="Wait for LLM response..."):
             res = c2p(user_input, show_plot=False)
@@ -109,6 +114,8 @@ if api_key and csv_file:
 
         st.session_state.past.append(user_input)
         st.session_state.generated.append(res)
+
+    st.button("Reset history", on_click=reset_history)
 
     if st.session_state["generated"]:
         for i in range(len(st.session_state["generated"]) - 1, -1, -1):

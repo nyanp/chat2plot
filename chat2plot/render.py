@@ -4,6 +4,7 @@ from typing import Any
 import altair as alt
 import pandas as pd
 import plotly.express as px
+import vegafusion as vf
 from altair.utils.data import to_values
 from plotly.graph_objs import Figure
 
@@ -56,10 +57,11 @@ def draw_plotly(df: pd.DataFrame, config: PlotConfig, show: bool = True) -> Figu
             **_ax_config(config, x, y),
         )
     elif chart_type == ChartType.SCATTER:
+        assert config.x is not None
         fig = px.scatter(
             df_filtered,
             color=config.hue.column if config.hue else None,
-            **_ax_config(config, config.measures[0].column, config.measures[1].column),
+            **_ax_config(config, config.x.column, config.y.column),
         )
     elif chart_type == ChartType.PIE:
         agg = groupby_agg(df_filtered, config)
@@ -73,13 +75,11 @@ def draw_plotly(df: pd.DataFrame, config: PlotConfig, show: bool = True) -> Figu
                 agg, **_ax_config(config, agg.columns[0], y=agg.columns[-1])
             )
         else:
-            assert config.dimension is not None
+            assert config.x is not None
             fig = func_table[chart_type](
                 df_filtered,
                 color=config.hue.column if config.hue else None,
-                **_ax_config(
-                    config, config.dimension.column, config.measures[0].column
-                ),
+                **_ax_config(config, config.x.column, config.y.column),
             )
     else:
         raise ValueError(f"Unknown chart_type: {chart_type}")
@@ -91,8 +91,13 @@ def draw_plotly(df: pd.DataFrame, config: PlotConfig, show: bool = True) -> Figu
 
 
 def draw_altair(
-    df: pd.DataFrame, config: dict[str, Any], show: bool = True
+    df: pd.DataFrame,
+    config: dict[str, Any],
+    show: bool = True,
+    use_vega_fusion: bool = True,
 ) -> alt.Chart:
+    if use_vega_fusion:
+        vf.enable()
     spec = copy.deepcopy(config)
     spec["data"] = to_values(df)
     chart = alt.Chart.from_dict(spec)
@@ -103,11 +108,9 @@ def draw_altair(
 
 
 def groupby_agg(df: pd.DataFrame, config: PlotConfig) -> pd.DataFrame:
-    assert len(config.measures) == 1
+    group_by = [config.x.column] if config.x is not None else []
 
-    group_by = [config.dimension.column] if config.dimension is not None else []
-
-    if config.hue and config.hue != config.dimension:
+    if config.hue and config.hue != config.x:
         group_by.append(config.hue.column)
 
     agg_method = {
@@ -119,17 +122,15 @@ def groupby_agg(df: pd.DataFrame, config: PlotConfig) -> pd.DataFrame:
         AggregationType.MAX: "max",
     }
 
-    m = config.measures[0]
-    assert m.aggregation_method is not None
+    m = config.y
+    assert m.aggregation is not None
 
     if not group_by:
-        return pd.DataFrame(
-            {str(m): [df[m.column].agg(agg_method[m.aggregation_method])]}
-        )
+        return pd.DataFrame({str(m): [df[m.column].agg(agg_method[m.aggregation])]})
     else:
         agg = (
             df.groupby(group_by, dropna=False)[m.column]
-            .agg(agg_method[m.aggregation_method])
+            .agg(agg_method[m.aggregation])
             .rename(str(m))
         )
         ascending = config.sort_order == SortOrder.ASC
@@ -143,9 +144,7 @@ def groupby_agg(df: pd.DataFrame, config: PlotConfig) -> pd.DataFrame:
 
 
 def is_aggregation(config: PlotConfig) -> bool:
-    return (
-        len(config.measures) == 1 and config.measures[0].aggregation_method is not None
-    )
+    return config.y.aggregation is not None
 
 
 def filter_data(df: pd.DataFrame, filters: list[Filter]) -> pd.DataFrame:

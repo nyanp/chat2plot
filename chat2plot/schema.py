@@ -61,8 +61,16 @@ class Measure:
 
 
 @dataclass(frozen=True)
-class Dimension:
+class Field:
     column: str
+    aggregation: AggregationType | None = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, str]) -> "Field":
+        return Field(
+            d["column"],
+            AggregationType(d["aggregation"]) if d.get("aggregation") else None,
+        )
 
 
 @dataclass(frozen=True)
@@ -73,10 +81,10 @@ class Filter:
 @dataclass
 class PlotConfig:
     chart_type: ChartType
-    measures: list[Measure]
-    dimension: Dimension | None
+    x: Field | None
+    y: Field
     filters: list[Filter]
-    hue: Dimension | None = None
+    hue: Field | None = None
     xmin: float | None = None
     xmax: float | None = None
     ymin: float | None = None
@@ -88,15 +96,15 @@ class PlotConfig:
 
     @property
     def required_columns(self) -> list[str]:
-        columns = [m.column for m in self.measures]
-        if self.dimension:
-            columns.append(self.dimension.column)
+        columns = [self.y.column]
+        if self.x:
+            columns.append(self.x.column)
         return columns
 
     @classmethod
     def from_json(cls, json_data: dict[str, Any]) -> "PlotConfig":
         assert "chart_type" in json_data
-        assert "dimension" in json_data
+        assert "y" in json_data
 
         def wrap_if_not_list(value: str | list[str]) -> list[str]:
             if not isinstance(value, list):
@@ -105,21 +113,15 @@ class PlotConfig:
                 return value
 
         chart_type = ChartType(json_data["chart_type"])
-        measures = [
-            Measure.from_text(m)
-            for m in wrap_if_not_list(json_data.get("measures", []))
-        ]
-        dimension = (
-            Dimension(json_data["dimension"]) if json_data.get("dimension") else None
-        )
+
         filters = [Filter(q) for q in wrap_if_not_list(json_data.get("filters", []))]
 
         return cls(
             chart_type,
-            measures,
-            dimension,
+            Field.from_dict(json_data["x"]) if json_data.get("x") else None,
+            Field.from_dict(json_data["y"]),
             filters,
-            Dimension(json_data["hue"]) if json_data.get("hue") else None,
+            Field.from_dict(json_data["hue"]) if json_data.get("hue") else None,
             json_data.get("xmin"),
             json_data.get("xmax"),
             json_data.get("ymin"),

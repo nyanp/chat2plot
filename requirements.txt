@@ -5,3 +5,4 @@ pandas>=1.5.0
 plotly>=5.0.0
 streamlit-chat>=0.0.2.2
 tabulate
+vegafusion[embed]>=1.0
