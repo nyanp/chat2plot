@@ -23,10 +23,10 @@ def _ax_config(config: PlotConfig, x: str, y: str) -> dict[str, str | dict[str, 
     ax: dict[str, str | dict[str, str]] = {"x": x, "y": y}
     labels: dict[str, str] = {}
 
-    if config.xlabel:
-        labels[x] = config.xlabel
-    if config.ylabel:
-        labels[y] = config.ylabel
+    if config.x and config.x.label:
+        labels[x] = config.x.label
+    if config.y.label:
+        labels[y] = config.y.label
 
     if labels:
         ax["labels"] = labels
@@ -61,7 +61,7 @@ def draw_plotly(df: pd.DataFrame, config: PlotConfig, show: bool = True) -> Figu
         fig = px.scatter(
             df_filtered,
             color=config.hue.column if config.hue else None,
-            **_ax_config(config, config.x.column, config.y.column),
+            **_ax_config(config, config.x.field.column, config.y.field.column),
         )
     elif chart_type == ChartType.PIE:
         agg = groupby_agg(df_filtered, config)
@@ -79,7 +79,7 @@ def draw_plotly(df: pd.DataFrame, config: PlotConfig, show: bool = True) -> Figu
             fig = func_table[chart_type](
                 df_filtered,
                 color=config.hue.column if config.hue else None,
-                **_ax_config(config, config.x.column, config.y.column),
+                **_ax_config(config, config.x.field.column, config.y.field.column),
             )
     else:
         raise ValueError(f"Unknown chart_type: {chart_type}")
@@ -108,9 +108,9 @@ def draw_altair(
 
 
 def groupby_agg(df: pd.DataFrame, config: PlotConfig) -> pd.DataFrame:
-    group_by = [config.x.column] if config.x is not None else []
+    group_by = [config.x.field.column] if config.x is not None else []
 
-    if config.hue and config.hue != config.x:
+    if config.hue and (not config.x or (config.hue.column != config.x.field.column)):
         group_by.append(config.hue.column)
 
     agg_method = {
@@ -122,16 +122,18 @@ def groupby_agg(df: pd.DataFrame, config: PlotConfig) -> pd.DataFrame:
         AggregationType.MAX: "max",
     }
 
-    m = config.y
-    assert m.aggregation is not None
+    y = config.y
+    assert y.field.aggregation is not None
 
     if not group_by:
-        return pd.DataFrame({str(m): [df[m.column].agg(agg_method[m.aggregation])]})
+        return pd.DataFrame(
+            {y.field.name(): [df[y.field.column].agg(agg_method[y.field.aggregation])]}
+        )
     else:
         agg = (
-            df.groupby(group_by, dropna=False)[m.column]
-            .agg(agg_method[m.aggregation])
-            .rename(str(m))
+            df.groupby(group_by, dropna=False)[y.field.column]
+            .agg(agg_method[y.field.aggregation])
+            .rename(y.field.name())
         )
         ascending = config.sort_order == SortOrder.ASC
 
@@ -144,10 +146,10 @@ def groupby_agg(df: pd.DataFrame, config: PlotConfig) -> pd.DataFrame:
 
 
 def is_aggregation(config: PlotConfig) -> bool:
-    return config.y.aggregation is not None
+    return config.y.field.aggregation is not None
 
 
-def filter_data(df: pd.DataFrame, filters: list[Filter]) -> pd.DataFrame:
+def filter_data(df: pd.DataFrame, filters: list[str]) -> pd.DataFrame:
     if not filters:
         return df
-    return df.query(" and ".join([str(f) for f in filters]))
+    return df.query(" and ".join([Filter.parse_from_llm(f).escaped() for f in filters]))

@@ -14,129 +14,29 @@ from plotly.graph_objs import Figure
 
 from chat2plot.dataset_description import description
 from chat2plot.render import draw_altair, draw_plotly
-from chat2plot.schema import LLMResponse, PlotConfig, ResponseType
+from chat2plot.schema import (
+    LLMResponse,
+    PlotConfig,
+    ResponseType,
+    get_schema_of_chart_config,
+)
 
 _logger = getLogger(__name__)
 
-_PROMPT = """
+
+def _build_prompt() -> str:
+    schema_json = json.dumps(get_schema_of_chart_config(inlining_refs=True), indent=2)
+    return (
+        """
 Your task is to generate chart configuration for the given dataset and user question delimited by <>.
 
 Responses should be in JSON format compliant to the following JSON Schema.
 
-{{
-  "title": "Chart config",
-  "description": "A configuration of chart",
-  "type": "object",
-  "properties": {{
-    "chart_type": {{
-      "description": "the type of the chart",
-      "type": "string",
-      "enum": [
-        "line",
-        "scatter",
-        "bar",
-        "pie",
-        "horizontal-bar",
-        "area"
-      ]
-    }},
-    "x": {{
-      "description": "X-axis column for the chart, or label column for pie chart.",
-      "type": "object",
-      "properties": {{
-        "column": {{
-          "description": "Column name of the dataset used as x-axis",
-          "type": "string"
-        }}
-      }},
-      "required": ["column"]
-    }},
-    "y": {{
-      "description": "Y-axis column for the chart, or value column for pie chart.",
-      "type": "object",
-      "properties": {{
-        "column": {{
-          "description": "Column name of the dataset used as y-axis",
-          "type": "string"
-        }},
-        "aggregation": {{
-          "description": "Type of aggregation. will be ignored when it is scatter plot.
-          "type": "string",
-          "enum": [
-            "SUM",
-            "AVG",
-            "COUNT",
-            "MAX",
-            "MIN",
-            "DISTINCT_COUNT"
-          ]
-        }}
-      }},
-      "required": ["column"]
-    }},
-    "filters": {{
-      "description": "List of filter conditions, where each filter must be in a valid format as an argument to the pandas df.query() method.",
-      "type": "array",
-      "items": {{
-        "type": "string"
-      }}
-    }},
-    "hue": {{
-      "description": "Dimension used as grouping variables that will produce different colors.",
-      "type": "object",
-      "properties": {{
-        "column": {{
-          "type": "string"
-        }}
-      }},
-      "required": ["column"]
-    }},
-    "xmin": {{
-      "description": "Minimum value of x-axis",
-      "type": "number"
-    }},
-    "xmax": {{
-      "description": "Maximum value of x-axis",
-      "type": "number"
-    }},
-    "ymin": {{
-      "description": "Minimum value of y-axis",
-      "type": "number"
-    }},
-    "ymax": {{
-      "description": "Maximum value of y-axis",
-      "type": "number"
-    }},
-    "xlabel": {{
-      "description": "Label of x-axis",
-      "type": "string"
-    }},
-    "ylabel": {{
-      "description": "Label of y-axis",
-      "type": "string"
-    }},
-    "sort_criteria": {{
-      "description": "The sorting criteria for x-axis",
-      "type": "string",
-      "enum": [
-        "name",
-        "value"
-      ]
-    }},
-    "sort_order": {{
-      "description": "Sorting order for x-axis",
-      "type": "string",
-      "enum": [
-        "asc",
-        "desc"
-      ]
-    }},
-  }},
-  "required": [
-    "chart_type",
-    "y"
-  ]
-}}
+
+"""
+        + schema_json.replace("{", "{{").replace("}", "}}")
+        + """
+
 
 Instead of specifying column names in the dataset directly for `x.column` and `y.column`, you can use one of the following conversion functions if necessary:
 
@@ -153,6 +53,10 @@ This is the result of `print(df.head())`:
 
 Make sure to prefix the requested json string with triple backticks exactly and suffix the json with triple backticks exactly.
 """
+    )
+
+
+_PROMPT = _build_prompt()
 
 
 _PROMPT_VEGA = """
@@ -269,17 +173,17 @@ class Chat2Plot(Chat2PlotBase):
 
     def _parse_response(self, content: str) -> LLMResponse:
         if content == "not related":
-            return LLMResponse(ResponseType.NOT_RELATED)
+            return LLMResponse(response_type=ResponseType.NOT_RELATED, config=None)
 
         try:
             config = PlotConfig.from_json(parse_json(content))
             if self._verbose:
                 _logger.info(config)
-            return LLMResponse(ResponseType.SUCCESS, config)
+            return LLMResponse(response_type=ResponseType.SUCCESS, config=config)
         except Exception:
             _logger.warning(f"failed to parse LLM response: {content}")
             _logger.warning(traceback.format_exc())
-            return LLMResponse(ResponseType.UNKNOWN)
+            return LLMResponse(response_type=ResponseType.UNKNOWN, config=None)
 
 
 class Chat2Vega(Chat2PlotBase):

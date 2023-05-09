@@ -4,12 +4,12 @@ import os
 import subprocess
 import sys
 import time
-from dataclasses import asdict, is_dataclass
 
 import pandas as pd
 import streamlit as st
 from langchain.chat_models import ChatOpenAI
 from plotly.graph_objs import Figure
+from pydantic import BaseModel
 from streamlit_chat import message
 
 sys.path.append("../../")
@@ -126,8 +126,8 @@ if api_key and csv_file:
 
                 with col2:
                     config = res.config
-                    if is_dataclass(config):
-                        st.code(json.dumps(asdict(config), indent=2), language="python")
+                    if isinstance(config, BaseModel):
+                        st.code(config.json(indent=2), language="json")
                     else:
                         st.code(json.dumps(config, indent=2), language="json")
                 with col1:
