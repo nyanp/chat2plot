@@ -40,27 +40,6 @@ class SortOrder(str, Enum):
 
 
 @dataclass(frozen=True)
-class Measure:
-    column: str
-    aggregation_method: AggregationType | None = None
-
-    @classmethod
-    def from_text(cls, text: str) -> "Measure":
-        for agg in AggregationType:
-            m = re.match(rf"{agg.value}\((.*)\)", text)
-            if m:
-                return Measure(m.group(1), agg)
-
-        return Measure(text)
-
-    def __repr__(self) -> str:
-        if self.aggregation_method:
-            return f"{self.aggregation_method.value}({self.column})"
-        else:
-            return self.column
-
-
-@dataclass(frozen=True)
 class Field:
     column: str
     aggregation: AggregationType | None = None
@@ -69,14 +48,43 @@ class Field:
     def from_dict(cls, d: dict[str, str]) -> "Field":
         return Field(
             d["column"],
-            AggregationType(d["aggregation"]) if d.get("aggregation") else None,
+            AggregationType(d["aggregation"].upper()) if d.get("aggregation") else None,
         )
 
 
 @dataclass(frozen=True)
 class Filter:
-    query: str
+    lhs: str
+    rhs: str
+    op: str
 
+    def __repr__(self) -> str:
+        return f"{self.lhs} {self.op} {self.rhs}"
+
+    @classmethod
+    def from_text(cls, f: str) -> "Filter":
+        f = f.strip()
+        if f[0] == "(" and f[-1] == ")":
+            f = f[1:-1]  # strip parenthesis
+
+        supported_operators = [
+            "==",
+            "!=",
+            ">=",
+            "<=",
+            ">",
+            "<"
+        ]
+        for op in supported_operators:
+            m = re.match(fr"^(.*){op}(.*?)$", f)
+            if m:
+                lhs = m.group(1).strip()
+                rhs = m.group(2).strip()
+                if lhs[0] != "`":  # add escape
+                    lhs = f"`{lhs}`"
+                return Filter(lhs, rhs, op)
+
+        raise ValueError(f"Unsupported op or failed to parse: {f}")
 
 @dataclass
 class PlotConfig:
@@ -114,7 +122,7 @@ class PlotConfig:
 
         chart_type = ChartType(json_data["chart_type"])
 
-        filters = [Filter(q) for q in wrap_if_not_list(json_data.get("filters", []))]
+        filters = [Filter.from_text(q) for q in wrap_if_not_list(json_data.get("filters", []))]
 
         return cls(
             chart_type,

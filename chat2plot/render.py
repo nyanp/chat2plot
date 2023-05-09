@@ -150,4 +150,4 @@ def is_aggregation(config: PlotConfig) -> bool:
 def filter_data(df: pd.DataFrame, filters: list[Filter]) -> pd.DataFrame:
     if not filters:
         return df
-    return df.query(" and ".join([f.query for f in filters]))
+    return df.query(" and ".join([str(f) for f in filters]))
