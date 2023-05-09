@@ -36,6 +36,7 @@ def dynamic_install(module):
 # https://python.plainenglish.io/how-to-install-your-own-private-github-package-on-streamlit-cloud-eb3aaed9b179
 try:
     from chat2plot import ResponseType, chat2plot
+    from chat2plot.chat2plot import Chat2Vega
 except ModuleNotFoundError:
     github_token = st.secrets["github_token"]
     dynamic_install(f"git+https://{github_token}@github.com/nyanp/chat2plot.git")
@@ -109,7 +110,10 @@ if api_key and csv_file:
 
     if user_input:
         with st.spinner(text="Wait for LLM response..."):
-            res = c2p(user_input, show_plot=False)
+            if isinstance(c2p, Chat2Vega):
+                res = c2p(user_input, config_only=True)
+            else:
+                res = c2p(user_input, config_only=False, show_plot=False)
         response_type = res.response_type
 
         st.session_state.past.append(user_input)

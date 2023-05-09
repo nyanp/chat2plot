@@ -125,11 +125,13 @@ class Chat2PlotBase:
     def session(self) -> ChatSession:
         raise NotImplementedError()
 
-    def query(self, q: str, show_plot: bool = True) -> Plot:
+    def query(self, q: str, config_only: bool = False, show_plot: bool = False) -> Plot:
         raise NotImplementedError()
 
-    def __call__(self, q: str, show_plot: bool = True) -> Plot:
-        return self.query(q, show_plot)
+    def __call__(
+        self, q: str, config_only: bool = False, show_plot: bool = False
+    ) -> Plot:
+        return self.query(q, config_only, show_plot)
 
 
 class Chat2Plot(Chat2PlotBase):
@@ -144,14 +146,16 @@ class Chat2Plot(Chat2PlotBase):
     def session(self) -> ChatSession:
         return self._session
 
-    def query(self, q: str, show_plot: bool = True) -> Plot:
+    def query(self, q: str, config_only: bool = False, show_plot: bool = False) -> Plot:
         raw_response = self._session.query(q)
         res = self._parse_response(raw_response)
         if res.response_type == ResponseType.SUCCESS:
             assert res.config is not None
             try:
                 return Plot(
-                    self.render(self._df, res.config, show_plot),
+                    self.render(self._df, res.config, show_plot)
+                    if not config_only
+                    else None,
                     res.config,
                     res.response_type,
                     raw_response,
@@ -163,13 +167,15 @@ class Chat2Plot(Chat2PlotBase):
                 )
         return Plot(None, None, res.response_type, raw_response)
 
-    def __call__(self, q: str, show_plot: bool = True) -> Plot:
-        return self.query(q, show_plot)
+    def __call__(
+        self, q: str, config_only: bool = False, show_plot: bool = False
+    ) -> Plot:
+        return self.query(q, config_only, show_plot)
 
     def render(
-        self, df: pd.DataFrame, config: PlotConfig, show_plot: bool = True
+        self, df: pd.DataFrame, config: PlotConfig, config_only: bool = True
     ) -> Any:
-        return draw_plotly(df, config, show_plot)
+        return draw_plotly(df, config, config_only)
 
     def _parse_response(self, content: str) -> LLMResponse:
         if content == "not related":
@@ -198,7 +204,7 @@ class Chat2Vega(Chat2PlotBase):
     def session(self) -> ChatSession:
         return self._session
 
-    def query(self, q: str, show_plot: bool = True) -> Plot:
+    def query(self, q: str, config_only: bool = False, show_plot: bool = False) -> Plot:
         res = self._session.query(q)
         if res == "not related":
             return Plot(None, None, ResponseType.NOT_RELATED, res)
@@ -214,6 +220,9 @@ class Chat2Vega(Chat2PlotBase):
             _logger.warning(traceback.format_exc())
             return Plot(None, None, ResponseType.UNKNOWN, res)
 
+        if config_only:
+            return Plot(None, config, ResponseType.SUCCESS, res)
+
         try:
             plot = draw_altair(self._df, config, show_plot)
             return Plot(plot, config, ResponseType.SUCCESS, res)
@@ -221,8 +230,10 @@ class Chat2Vega(Chat2PlotBase):
             _logger.warning(traceback.format_exc())
             return Plot(None, config, ResponseType.FAILED_TO_RENDER, res)
 
-    def __call__(self, q: str, show_plot: bool = True) -> Plot:
-        return self.query(q, show_plot)
+    def __call__(
+        self, q: str, config_only: bool = False, show_plot: bool = False
+    ) -> Plot:
+        return self.query(q, config_only, show_plot)
 
 
 def chat2plot(
