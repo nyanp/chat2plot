@@ -15,79 +15,11 @@ from plotly.graph_objs import Figure
 
 from chat2plot.dataset_description import description
 from chat2plot.render import draw_altair, draw_plotly
-from chat2plot.schema import PlotConfig, ResponseType, get_schema_of_chart_config
+from chat2plot.schema import PlotConfig, ResponseType
 from chat2plot.dictionary_helper import delete_null_field
+from chat2plot.prompt import system_prompt, error_correction_prompt
 
 _logger = getLogger(__name__)
-
-
-def _build_prompt() -> str:
-    schema_json = json.dumps(get_schema_of_chart_config(inlining_refs=False, remove_title=True), indent=2)
-    return (
-        """
-Your task is to generate chart configuration for the given dataset and user question delimited by <>.
-
-Responses should be in JSON format compliant to the following JSON Schema.
-
-
-"""
-        + schema_json.replace("{", "{{").replace("}", "}}")
-        + """
-
-The user's question may be an instruction to fine-tune the previous chart, or it may be an instruction to create a new chart based on a completely new context. In the latter case, be careful not to use the context used for the previous chart.
-
-This is the result of `print(df.head())`:
-
-{dataset}
-
-You should do the following step by step:
-1. Explain whether filters should be applied to the data, which chart_type and columns should be used, and what transformations are necessary to fulfill the user's request.
-2. Generate schema-compliant JSON that represents 1.
-
-Make sure to prefix the requested json string with triple backticks exactly and suffix the json with triple backticks exactly.
-"""
-    )
-
-# If the user's question does not fall under any of above keys and is not a request about the appearance of the chart, simply reply "not related".
-
-
-def _build_error_correcting_prompt(base_prompt: str) -> str:
-    return (
-        base_prompt
-        + """
-The user asked the following question:
-{question}
-
-You generated this json:
-```
-{generated_json}
-```
-
-It fails with the following error:
-{error_message}
-
-Correct the json and return a new json (do not import anything) that fixes the above mentioned error.
-Do not generate the same json again.
-    """
-    )
-
-
-_PROMPT = _build_prompt()
-
-
-_PROMPT_VEGA = """
-Your task is to generate chart configuration for the given dataset and user question delimited by <>.
-
-Responses should be in JSON format compliant with the vega-lite specification, but `data` field must be excluded.
-
-If the user's question does not fall under any of above keys and is not a request about the appearance of the chart, simply reply "not related".
-
-This is the result of `print(df.head())`:
-
-{dataset}
-
-Make sure to prefix the requested json string with triple backticks exactly and suffix the json with triple backticks exactly.
-"""
 
 
 @dataclass(frozen=True)
@@ -95,6 +27,7 @@ class Plot:
     figure: alt.Chart | Figure | None
     config: PlotConfig | dict[str, Any] | None
     response_type: ResponseType
+    explanation: str
     raw_response: str
 
 
@@ -161,7 +94,7 @@ class Chat2Plot(Chat2PlotBase):
     def __init__(
         self, df: pd.DataFrame, chat: BaseChatModel | None = None, verbose: bool = False
     ):
-        self._session = ChatSession(df, _PROMPT, "<{text}>", chat)
+        self._session = ChatSession(df, system_prompt("default"), "<{text}>", chat)
         self._df = df
         self._verbose = verbose
 
@@ -180,10 +113,10 @@ class Chat2Plot(Chat2PlotBase):
                 _logger.warning(traceback.format_exc())
 
             msg = e.message if isinstance(e, jsonschema.ValidationError) else str(e)
-            error_correction = _build_error_correcting_prompt(_PROMPT).format(
+            error_correction = error_correction_prompt("default").format(
                 dataset=description(self._df),
                 question=q,
-                generated_json=self._session.last_response(),
+                response=raw_response,
                 error_message=msg,
             )
             corrected_response = self._session.query_without_history(error_correction)
@@ -197,7 +130,7 @@ class Chat2Plot(Chat2PlotBase):
                     _logger.warning(e)
                     _logger.warning(traceback.format_exc())
                 return Plot(
-                    None, None, ResponseType.FAILED_TO_RENDER, corrected_response
+                    None, None, ResponseType.FAILED_TO_RENDER, corrected_response, corrected_response
                 )
 
     def __call__(
@@ -212,26 +145,26 @@ class Chat2Plot(Chat2PlotBase):
 
     def _parse_response(self, content: str, config_only: bool, show_plot: bool) -> Plot:
         if content == "not related":
-            return Plot(None, None, ResponseType.NOT_RELATED, content)
+            return Plot(None, None, ResponseType.NOT_RELATED, content, content)
 
-        json_data = delete_null_field(parse_json(content))
+        explanation, json_data = parse_json(content)
         jsonschema.validate(json_data, PlotConfig.schema())
         config = PlotConfig.from_json(json_data)
         if self._verbose:
             _logger.info(config)
 
         if config_only:
-            return Plot(None, config, ResponseType.SUCCESS, content)
+            return Plot(None, config, ResponseType.SUCCESS, explanation, content)
 
         figure = self.render(self._df, config, show_plot)
-        return Plot(figure, config, ResponseType.SUCCESS, content)
+        return Plot(figure, config, ResponseType.SUCCESS, explanation, content)
 
 
 class Chat2Vega(Chat2PlotBase):
     def __init__(
         self, df: pd.DataFrame, chat: BaseChatModel | None = None, verbose: bool = False
     ):
-        self._session = ChatSession(df, _PROMPT_VEGA, "<{text}>", chat)
+        self._session = ChatSession(df, system_prompt("vega"), "<{text}>", chat)
         self._df = df
         self._verbose = verbose
 
@@ -242,10 +175,10 @@ class Chat2Vega(Chat2PlotBase):
     def query(self, q: str, config_only: bool = False, show_plot: bool = False) -> Plot:
         res = self._session.query(q)
         if res == "not related":
-            return Plot(None, None, ResponseType.NOT_RELATED, res)
+            return Plot(None, None, ResponseType.NOT_RELATED, res, res)
 
         try:
-            config = parse_json(res)
+            explanation, config = parse_json(res)
             if "data" in config:
                 del config["data"]
             if self._verbose:
@@ -253,17 +186,17 @@ class Chat2Vega(Chat2PlotBase):
         except Exception:
             _logger.warning(f"failed to parse LLM response: {res}")
             _logger.warning(traceback.format_exc())
-            return Plot(None, None, ResponseType.UNKNOWN, res)
+            return Plot(None, None, ResponseType.UNKNOWN, res, res)
 
         if config_only:
-            return Plot(None, config, ResponseType.SUCCESS, res)
+            return Plot(None, config, ResponseType.SUCCESS, explanation, res)
 
         try:
             plot = draw_altair(self._df, config, show_plot)
-            return Plot(plot, config, ResponseType.SUCCESS, res)
+            return Plot(plot, config, ResponseType.SUCCESS, explanation, res)
         except Exception:
             _logger.warning(traceback.format_exc())
-            return Plot(None, config, ResponseType.FAILED_TO_RENDER, res)
+            return Plot(None, config, ResponseType.FAILED_TO_RENDER, explanation, res)
 
     def __call__(
         self, q: str, config_only: bool = False, show_plot: bool = False
@@ -287,19 +220,12 @@ def chat2plot(
         )
 
 
-def parse_json(content: str) -> dict[str, Any]:
-    try:
-        return json.loads(content)  # type: ignore
-    except ValueError:
-        ptn = r"```json(.*)```" if "```json" in content else r"```(.*)```"
-        s = re.search(ptn, content, re.MULTILINE | re.DOTALL)
-        if s:
-            return json.loads(s.group(1))  # type: ignore
-
-        # sometimes LLM forgets start marker
-        ptn = r"(.*)```"
-        s = re.search(ptn, content, re.MULTILINE | re.DOTALL)
-        if s:
-            return json.loads(s.group(1))  # type: ignore
-
-        raise
+def parse_json(content: str) -> tuple[str, dict[str, Any]]:
+    ptn = r"```json(.*)```" if "```json" in content else r"```(.*)```"
+    s = re.search(ptn, content, re.MULTILINE | re.DOTALL)
+    if s:
+        json_part = json.loads(s.group(1))  # type: ignore
+        non_json_part = content.replace(s.group(0), "")
+        return non_json_part, delete_null_field(json_part)
+    else:
+        raise ValueError("failed to find start(```) and end(```) marker.")

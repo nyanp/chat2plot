@@ -126,8 +126,9 @@ if api_key and csv_file:
             res = st.session_state["generated"][i]
 
             if res.response_type == ResponseType.SUCCESS:
-                print(res.raw_response)
                 col1, col2 = st.columns([2, 1])
+
+                message(res.explanation, key=str(i))
 
                 with col2:
                     config = res.config

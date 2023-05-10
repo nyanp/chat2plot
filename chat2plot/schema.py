@@ -212,11 +212,6 @@ class PlotConfig(pydantic.BaseModel):
         )
 
 
-class LLMResponse(pydantic.BaseModel):
-    response_type: ResponseType
-    config: PlotConfig | None
-
-
 def get_schema_of_chart_config(inlining_refs: bool = False, remove_title: bool = True) -> dict[str, Any]:
     defs = jsonref.loads(PlotConfig.schema_json()) if inlining_refs else PlotConfig.schema()  # type: ignore
 
