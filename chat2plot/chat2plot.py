@@ -227,5 +227,9 @@ def parse_json(content: str) -> tuple[str, dict[str, Any]]:
         json_part = json.loads(s.group(1))  # type: ignore
         non_json_part = content.replace(s.group(0), "")
         return non_json_part, delete_null_field(json_part)
-    else:
-        raise ValueError("failed to find start(```) and end(```) marker.")
+
+    try:
+        json_part = json.loads(content)
+        return "", json_part
+    except Exception:
+        raise ValueError("failed to find start(```) and end(```) marker")
