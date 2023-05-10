@@ -36,7 +36,7 @@ def _ax_config(config: PlotConfig, x: str, y: str) -> dict[str, str | dict[str, 
 
 def draw_plotly(df: pd.DataFrame, config: PlotConfig, show: bool = True) -> Figure:
     df_filtered = filter_data(df, config.filters).copy()
-    df_filtered = transform(df_filtered, config)
+    df_filtered, config = transform(df_filtered, config)
 
     chart_type = config.chart_type
 
@@ -52,7 +52,7 @@ def draw_plotly(df: pd.DataFrame, config: PlotConfig, show: bool = True) -> Figu
 
         fig = px.bar(
             agg,
-            color=config.hue.column if config.hue else None,
+            color=config.hue or None,
             orientation=orientation,
             **_ax_config(config, x, y),
         )
@@ -60,8 +60,8 @@ def draw_plotly(df: pd.DataFrame, config: PlotConfig, show: bool = True) -> Figu
         assert config.x is not None
         fig = px.scatter(
             df_filtered,
-            color=config.hue.column if config.hue else None,
-            **_ax_config(config, config.x.field.column, config.y.field.column),
+            color=config.hue or None,
+            **_ax_config(config, config.x.column, config.y.column),
         )
     elif chart_type == ChartType.PIE:
         agg = groupby_agg(df_filtered, config)
@@ -78,8 +78,8 @@ def draw_plotly(df: pd.DataFrame, config: PlotConfig, show: bool = True) -> Figu
             assert config.x is not None
             fig = func_table[chart_type](
                 df_filtered,
-                color=config.hue.column if config.hue else None,
-                **_ax_config(config, config.x.field.column, config.y.field.column),
+                color=config.hue or None,
+                **_ax_config(config, config.x.column, config.y.column),
             )
     else:
         raise ValueError(f"Unknown chart_type: {chart_type}")
@@ -108,10 +108,10 @@ def draw_altair(
 
 
 def groupby_agg(df: pd.DataFrame, config: PlotConfig) -> pd.DataFrame:
-    group_by = [config.x.field.column] if config.x is not None else []
+    group_by = [config.x.column] if config.x is not None else []
 
-    if config.hue and (not config.x or (config.hue.column != config.x.field.column)):
-        group_by.append(config.hue.column)
+    if config.hue and (not config.x or (config.hue != config.x.column)):
+        group_by.append(config.hue)
 
     agg_method = {
         AggregationType.AVG: "mean",
@@ -123,17 +123,17 @@ def groupby_agg(df: pd.DataFrame, config: PlotConfig) -> pd.DataFrame:
     }
 
     y = config.y
-    assert y.field.aggregation is not None
+    assert y.transform.aggregation is not None
 
     if not group_by:
         return pd.DataFrame(
-            {y.field.name(): [df[y.field.column].agg(agg_method[y.field.aggregation])]}
+            {y.transformed_name(): [df[y.column].agg(agg_method[y.transform.aggregation])]}
         )
     else:
         agg = (
-            df.groupby(group_by, dropna=False)[y.field.column]
-            .agg(agg_method[y.field.aggregation])
-            .rename(y.field.name())
+            df.groupby(group_by, dropna=False)[y.column]
+            .agg(agg_method[y.transform.aggregation])
+            .rename(y.transformed_name())
         )
         ascending = config.sort_order == SortOrder.ASC
 
@@ -146,10 +146,19 @@ def groupby_agg(df: pd.DataFrame, config: PlotConfig) -> pd.DataFrame:
 
 
 def is_aggregation(config: PlotConfig) -> bool:
-    return config.y.field.aggregation is not None
+    return config.y.transform and config.y.transform.aggregation is not None
 
 
 def filter_data(df: pd.DataFrame, filters: list[str]) -> pd.DataFrame:
     if not filters:
         return df
-    return df.query(" and ".join([Filter.parse_from_llm(f).escaped() for f in filters]))
+
+    elements = []
+    for f in filters:
+        try:
+            e = Filter.parse_from_llm(f).escaped()
+        except Exception:
+            e = f
+        elements.append(f"({e})")
+
+    return df.query(" and ".join(elements))

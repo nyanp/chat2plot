@@ -16,12 +16,13 @@ from plotly.graph_objs import Figure
 from chat2plot.dataset_description import description
 from chat2plot.render import draw_altair, draw_plotly
 from chat2plot.schema import PlotConfig, ResponseType, get_schema_of_chart_config
+from chat2plot.dictionary_helper import delete_null_field
 
 _logger = getLogger(__name__)
 
 
 def _build_prompt() -> str:
-    schema_json = json.dumps(get_schema_of_chart_config(inlining_refs=True), indent=2)
+    schema_json = json.dumps(get_schema_of_chart_config(inlining_refs=False, remove_title=True), indent=2)
     return (
         """
 Your task is to generate chart configuration for the given dataset and user question delimited by <>.
@@ -33,23 +34,21 @@ Responses should be in JSON format compliant to the following JSON Schema.
         + schema_json.replace("{", "{{").replace("}", "}}")
         + """
 
-
-Instead of specifying column names in the dataset directly for "column" properties in the json, you can use one of the following transform functions if necessary:
-
-BINNING(column, interval): binning a numerical column to the specified interval. interval should be integer literal. example: BINNING(x, 10)
-ROUND_DATETIME(column, period): binning a date/datetime column to the specified period. period should be one of [day, week, month, year]. example: ROUND_DATETIME(x, year)
-
 The user's question may be an instruction to fine-tune the previous chart, or it may be an instruction to create a new chart based on a completely new context. In the latter case, be careful not to use the context used for the previous chart.
-
-If the user's question does not fall under any of above keys and is not a request about the appearance of the chart, simply reply "not related".
 
 This is the result of `print(df.head())`:
 
 {dataset}
 
+You should do the following step by step:
+1. Explain whether filters should be applied to the data, which chart_type and columns should be used, and what transformations are necessary to fulfill the user's request.
+2. Generate schema-compliant JSON that represents 1.
+
 Make sure to prefix the requested json string with triple backticks exactly and suffix the json with triple backticks exactly.
 """
     )
+
+# If the user's question does not fall under any of above keys and is not a request about the appearance of the chart, simply reply "not related".
 
 
 def _build_error_correcting_prompt(base_prompt: str) -> str:
@@ -176,6 +175,10 @@ class Chat2Plot(Chat2PlotBase):
         try:
             return self._parse_response(raw_response, config_only, show_plot)
         except Exception as e:
+            if self._verbose:
+                _logger.info(f"first response: {raw_response}")
+                _logger.warning(traceback.format_exc())
+
             msg = e.message if isinstance(e, jsonschema.ValidationError) else str(e)
             error_correction = _build_error_correcting_prompt(_PROMPT).format(
                 dataset=description(self._df),
@@ -211,7 +214,7 @@ class Chat2Plot(Chat2PlotBase):
         if content == "not related":
             return Plot(None, None, ResponseType.NOT_RELATED, content)
 
-        json_data = parse_json(content)
+        json_data = delete_null_field(parse_json(content))
         jsonschema.validate(json_data, PlotConfig.schema())
         config = PlotConfig.from_json(json_data)
         if self._verbose:
@@ -292,4 +295,11 @@ def parse_json(content: str) -> dict[str, Any]:
         s = re.search(ptn, content, re.MULTILINE | re.DOTALL)
         if s:
             return json.loads(s.group(1))  # type: ignore
+
+        # sometimes LLM forgets start marker
+        ptn = r"(.*)```"
+        s = re.search(ptn, content, re.MULTILINE | re.DOTALL)
+        if s:
+            return json.loads(s.group(1))  # type: ignore
+
         raise

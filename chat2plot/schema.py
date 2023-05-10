@@ -5,6 +5,8 @@ from typing import Any, Type
 import jsonref
 import pydantic
 
+from chat2plot.dictionary_helper import remove_field_recursively, flatten_single_element_allof
+
 
 class SchemaWithoutTitle:
     @staticmethod
@@ -48,31 +50,46 @@ class SortOrder(str, Enum):
     DESC = "desc"
 
 
-class Field(pydantic.BaseModel):
-    column: str = pydantic.Field(
-        None,
-        description="column name of the dataset. "
-        "If instead of column name, a separately defined transform function can be used.",
-    )
+class TimeUnit(str, Enum):
+    YEAR= "year"
+    MONTH = "month"
+    WEEK = "week"
+    QUARTER = "quarter"
+    DAY = "day"
+
+
+class Transform(pydantic.BaseModel):
     aggregation: AggregationType | None = pydantic.Field(
         None,
-        description=f"Type of aggregation (should be one of {list(map(lambda x: x.value, AggregationType))}). It will be ignored when it is scatter plot",
+        description=f"Type of aggregation. It will be ignored when it is scatter plot",
+    )
+    bin_size: int | None = pydantic.Field(
+        None,
+        description="Integer value as the number of bins used to discretizes numeric values into a set of bins"
+    )
+    time_unit: TimeUnit | None = pydantic.Field(
+        None,
+        description="The time unit used to descretize date/datetime values"
     )
 
-    def name(self) -> str:
-        return (
-            f"{self.aggregation.value}({self.column})"
-            if self.aggregation
-            else self.column
-        )
+    def transformed_name(self, col: str) -> str:
+        dst = col
+        if self.time_unit:
+            dst = f"UNIT({col}, {self.time_unit.value})"
+        if self.bin_size:
+            dst = f"BINNING({col}, {self.bin_size})"
+        if self.aggregation:
+            dst = f"{self.aggregation.value}({col})"
+        return dst
 
     @classmethod
-    def parse_from_llm(cls, d: dict[str, str]) -> "Field":
-        return Field(
-            column=d["column"],
+    def parse_from_llm(cls, d: dict[str, str]) -> "Transform":
+        return Transform(
             aggregation=AggregationType(d["aggregation"].upper())
             if d.get("aggregation")
             else None,
+            bin_size=d.get("bin_size") or None,
+            time_unit=d.get("time_unit") or None
         )
 
     class Config(SchemaWithoutTitle):
@@ -109,10 +126,14 @@ class Filter(pydantic.BaseModel):
 
 
 class Axis(pydantic.BaseModel):
-    field: Field
+    column: str = pydantic.Field(None, description="column in datasets used for the axis")
+    transform: Transform | None = pydantic.Field(None, description="transformation applied to column")
     min_value: float | None
     max_value: float | None
     label: str | None
+
+    def transformed_name(self):
+        return self.transform.transformed_name(self.column) if self.transform else self.column
 
     class Config(SchemaWithoutTitle):
         pass
@@ -120,15 +141,21 @@ class Axis(pydantic.BaseModel):
     @classmethod
     def parse_from_llm(cls, d: dict[str, str | float | dict[str, str]]) -> "Axis":
         return Axis(
-            field=Field.parse_from_llm(d["field"]),  # type: ignore
+            column=d.get("column") or None,
+            transform=Transform.parse_from_llm(d["transform"]) if "transform" in d else None,  # type: ignore
             min_value=d.get("min_value"),  # type: ignore
             max_value=d.get("max_value"),  # type: ignore
-            label=d.get("label"),  # type: ignore
+            label=d.get("label") or None,  # type: ignore
         )
 
 
 class PlotConfig(pydantic.BaseModel):
     chart_type: ChartType = pydantic.Field(None, description="the type of the chart")
+    filters: list[str] = pydantic.Field(
+        None,
+        description="List of filter conditions, where each filter must be a legal string that can be passed to df.query(),"
+        ' such as "x >= 0". Filters will be calculated before transforming axis.',
+    )
     x: Axis | None = pydantic.Field(
         None, description="X-axis for the chart, or label column for pie chart"
     )
@@ -136,14 +163,9 @@ class PlotConfig(pydantic.BaseModel):
         None,
         description="Y-axis or measure value for the chart, or the wedge sizes for pie chart.",
     )
-    filters: list[str] = pydantic.Field(
+    hue: str | None = pydantic.Field(
         None,
-        description="List of filter conditions, where each filter must be a legal string that can be passed to df.query(),"
-        ' such as "x >= 0".',
-    )
-    hue: Field | None = pydantic.Field(
-        None,
-        description="Dimension used as grouping variables that will produce different colors.",
+        description="Column name used as grouping variables that will produce different colors.",
     )
     sort_criteria: SortingCriteria | None = pydantic.Field(
         None, description="The sorting criteria for x-axis"
@@ -157,9 +179,9 @@ class PlotConfig(pydantic.BaseModel):
 
     @property
     def required_columns(self) -> list[str]:
-        columns = [self.y.field.column]
+        columns = [self.y.column]
         if self.x:
-            columns.append(self.x.field.column)
+            columns.append(self.x.column)
         return columns
 
     @classmethod
@@ -180,9 +202,7 @@ class PlotConfig(pydantic.BaseModel):
             x=Axis.parse_from_llm(json_data["x"]) if json_data.get("x") else None,
             y=Axis.parse_from_llm(json_data["y"]),
             filters=wrap_if_not_list(json_data.get("filters", [])),
-            hue=Field.parse_from_llm(json_data["hue"])
-            if json_data.get("hue")
-            else None,
+            hue=json_data.get("hue") or None,
             sort_criteria=SortingCriteria(json_data["sort_criteria"])
             if json_data.get("sort_criteria")
             else None,
@@ -197,8 +217,12 @@ class LLMResponse(pydantic.BaseModel):
     config: PlotConfig | None
 
 
-def get_schema_of_chart_config(inlining_refs: bool = False) -> dict[str, Any]:
-    if inlining_refs:
-        return jsonref.loads(PlotConfig.schema_json())  # type: ignore
-    else:
-        return PlotConfig.schema()
+def get_schema_of_chart_config(inlining_refs: bool = False, remove_title: bool = True) -> dict[str, Any]:
+    defs = jsonref.loads(PlotConfig.schema_json()) if inlining_refs else PlotConfig.schema()  # type: ignore
+
+    if remove_title:
+        defs = remove_field_recursively(defs, "title")
+
+    defs = flatten_single_element_allof(defs)
+
+    return defs
