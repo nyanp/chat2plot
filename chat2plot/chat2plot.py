@@ -6,6 +6,7 @@ from logging import getLogger
 from typing import Any
 
 import altair as alt
+import jsonschema
 import pandas as pd
 from langchain.chat_models import ChatOpenAI
 from langchain.chat_models.base import BaseChatModel
@@ -14,12 +15,7 @@ from plotly.graph_objs import Figure
 
 from chat2plot.dataset_description import description
 from chat2plot.render import draw_altair, draw_plotly
-from chat2plot.schema import (
-    LLMResponse,
-    PlotConfig,
-    ResponseType,
-    get_schema_of_chart_config,
-)
+from chat2plot.schema import PlotConfig, ResponseType, get_schema_of_chart_config
 
 _logger = getLogger(__name__)
 
@@ -38,7 +34,7 @@ Responses should be in JSON format compliant to the following JSON Schema.
         + """
 
 
-Instead of specifying column names in the dataset directly for `x.column` and `y.column`, you can use one of the following conversion functions if necessary:
+Instead of specifying column names in the dataset directly for "column" properties in the json, you can use one of the following transform functions if necessary:
 
 BINNING(column, interval): binning a numerical column to the specified interval. interval should be integer literal. example: BINNING(x, 10)
 ROUND_DATETIME(column, period): binning a date/datetime column to the specified period. period should be one of [day, week, month, year]. example: ROUND_DATETIME(x, year)
@@ -53,6 +49,27 @@ This is the result of `print(df.head())`:
 
 Make sure to prefix the requested json string with triple backticks exactly and suffix the json with triple backticks exactly.
 """
+    )
+
+
+def _build_error_correcting_prompt(base_prompt: str) -> str:
+    return (
+        base_prompt
+        + """
+The user asked the following question:
+{question}
+
+You generated this json:
+```
+{generated_json}
+```
+
+It fails with the following error:
+{error_message}
+
+Correct the json and return a new json (do not import anything) that fixes the above mentioned error.
+Do not generate the same json again.
+    """
     )
 
 
@@ -108,6 +125,10 @@ class ChatSession:
     def set_chatmodel(self, chat: BaseChatModel) -> None:
         self._chat = chat
 
+    def query_without_history(self, q: str) -> str:
+        response = self._chat([HumanMessage(content=q)])
+        return response.content
+
     def query(self, q: str) -> str:
         prompt = self._user_prompt_template.format(text=q)
         response = self._query(prompt)
@@ -118,6 +139,9 @@ class ChatSession:
         response = self._chat(self._conversation_history)
         self._conversation_history.append(response)
         return response
+
+    def last_response(self) -> str:
+        return self._conversation_history[-1].content
 
 
 class Chat2PlotBase:
@@ -148,24 +172,30 @@ class Chat2Plot(Chat2PlotBase):
 
     def query(self, q: str, config_only: bool = False, show_plot: bool = False) -> Plot:
         raw_response = self._session.query(q)
-        res = self._parse_response(raw_response)
-        if res.response_type == ResponseType.SUCCESS:
-            assert res.config is not None
+
+        try:
+            return self._parse_response(raw_response, config_only, show_plot)
+        except Exception as e:
+            msg = e.message if isinstance(e, jsonschema.ValidationError) else str(e)
+            error_correction = _build_error_correcting_prompt(_PROMPT).format(
+                dataset=description(self._df),
+                question=q,
+                generated_json=self._session.last_response(),
+                error_message=msg,
+            )
+            corrected_response = self._session.query_without_history(error_correction)
+            if self._verbose:
+                _logger.info(f"retry response: {corrected_response}")
+
             try:
+                return self._parse_response(corrected_response, config_only, show_plot)
+            except Exception as e:
+                if self._verbose:
+                    _logger.warning(e)
+                    _logger.warning(traceback.format_exc())
                 return Plot(
-                    self.render(self._df, res.config, show_plot)
-                    if not config_only
-                    else None,
-                    res.config,
-                    res.response_type,
-                    raw_response,
+                    None, None, ResponseType.FAILED_TO_RENDER, corrected_response
                 )
-            except Exception:
-                _logger.warning(traceback.format_exc())
-                return Plot(
-                    None, res.config, ResponseType.FAILED_TO_RENDER, raw_response
-                )
-        return Plot(None, None, res.response_type, raw_response)
 
     def __call__(
         self, q: str, config_only: bool = False, show_plot: bool = False
@@ -173,23 +203,25 @@ class Chat2Plot(Chat2PlotBase):
         return self.query(q, config_only, show_plot)
 
     def render(
-        self, df: pd.DataFrame, config: PlotConfig, config_only: bool = True
+        self, df: pd.DataFrame, config: PlotConfig, show_plot: bool = True
     ) -> Any:
-        return draw_plotly(df, config, config_only)
+        return draw_plotly(df, config, show_plot)
 
-    def _parse_response(self, content: str) -> LLMResponse:
+    def _parse_response(self, content: str, config_only: bool, show_plot: bool) -> Plot:
         if content == "not related":
-            return LLMResponse(response_type=ResponseType.NOT_RELATED, config=None)
+            return Plot(None, None, ResponseType.NOT_RELATED, content)
 
-        try:
-            config = PlotConfig.from_json(parse_json(content))
-            if self._verbose:
-                _logger.info(config)
-            return LLMResponse(response_type=ResponseType.SUCCESS, config=config)
-        except Exception:
-            _logger.warning(f"failed to parse LLM response: {content}")
-            _logger.warning(traceback.format_exc())
-            return LLMResponse(response_type=ResponseType.UNKNOWN, config=None)
+        json_data = parse_json(content)
+        jsonschema.validate(json_data, PlotConfig.schema())
+        config = PlotConfig.from_json(json_data)
+        if self._verbose:
+            _logger.info(config)
+
+        if config_only:
+            return Plot(None, config, ResponseType.SUCCESS, content)
+
+        figure = self.render(self._df, config, show_plot)
+        return Plot(figure, config, ResponseType.SUCCESS, content)
 
 
 class Chat2Vega(Chat2PlotBase):

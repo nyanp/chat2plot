@@ -1,8 +1,8 @@
-import json
 import re
 from enum import Enum
 from typing import Any, Type
 
+import jsonref
 import pydantic
 
 
@@ -49,9 +49,14 @@ class SortOrder(str, Enum):
 
 
 class Field(pydantic.BaseModel):
-    column: str = pydantic.Field(None, description="column name of the dataset")
+    column: str = pydantic.Field(
+        None,
+        description="column name of the dataset. "
+        "If instead of column name, a separately defined transform function can be used.",
+    )
     aggregation: AggregationType | None = pydantic.Field(
-        None, description="Type of aggregation. will be ignored when it is scatter plot"
+        None,
+        description=f"Type of aggregation (should be one of {list(map(lambda x: x.value, AggregationType))}). It will be ignored when it is scatter plot",
     )
 
     def name(self) -> str:
@@ -133,7 +138,8 @@ class PlotConfig(pydantic.BaseModel):
     )
     filters: list[str] = pydantic.Field(
         None,
-        description='List of filter conditions, where each filter must be a legal string that can be passed to df.query(), such as "x >= 0".',
+        description="List of filter conditions, where each filter must be a legal string that can be passed to df.query(),"
+        ' such as "x >= 0".',
     )
     hue: Field | None = pydantic.Field(
         None,
@@ -191,51 +197,8 @@ class LLMResponse(pydantic.BaseModel):
     config: PlotConfig | None
 
 
-def inlining_refs_in_schema(
-    schema: dict[str, Any], MAX_TRIES: int = 100, not_inlining: list[str] | None = None
-) -> dict[str, Any]:
-    not_inlining = not_inlining or []
-    assert not_inlining is not None
-
-    def replace_value_in_dict(item: Any, original_schema: dict[str, Any]) -> Any:
-        if isinstance(item, list):
-            return [replace_value_in_dict(i, original_schema) for i in item]
-        elif isinstance(item, dict):
-            if list(item.keys()) == ["$ref"]:
-                definitions = item["$ref"][2:].split("/")
-                if definitions[-1] in not_inlining:  # type: ignore
-                    return item
-                res = original_schema.copy()
-                for definition in definitions:
-                    res = res[definition]
-                return res
-            else:
-                return {
-                    key: replace_value_in_dict(i, original_schema)
-                    for key, i in item.items()
-                }
-        else:
-            return item
-
-    for i in range(MAX_TRIES):
-        if "$ref" not in json.dumps(schema):
-            break
-        schema = replace_value_in_dict(schema.copy(), schema.copy())
-
-    defs = list(schema["definitions"].keys())
-    for key in defs:
-        if key not in not_inlining:
-            del schema["definitions"][key]
-
-    if not schema["definitions"]:
-        del schema["definitions"]
-
-    return schema
-
-
-def get_schema_of_chart_config(inlining_refs: bool = True) -> dict[str, Any]:
-    schema = PlotConfig.schema()
+def get_schema_of_chart_config(inlining_refs: bool = False) -> dict[str, Any]:
     if inlining_refs:
-        schema = inlining_refs_in_schema(schema)
-
-    return schema
+        return jsonref.loads(PlotConfig.schema_json())  # type: ignore
+    else:
+        return PlotConfig.schema()
