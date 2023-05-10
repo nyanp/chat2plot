@@ -19,12 +19,17 @@ df = pd.read_csv(...)
 # 2. Pass a dataframe to draw
 c2p = chat2plot(df)
 
-# 3. Plot chart interactively
-c2p("average target over countries")
+result = c2p("average target over countries")
+result.figure.show()  # draw plot
+print(result.config)  # get config (json / dataclass)
+print(result.explanation)  # see the explanation of config by LLM
 
-c2p("change to horizontal-bar chart")
+# you can make follow-up request to refine chart
+result = c2p("change to horizontal-bar chart")
+result.figure.show()
 
-c2p("...")
+# draw chart inside chat2plot
+_ = c2p("filter data to asia region", show_plot=True)
 ```
 
 ## Why Chat2Plpot
