@@ -91,7 +91,7 @@ if api_key and csv_file:
 
     chart_format = st.selectbox(
         "Chart format",
-        ("vega", "simple"),
+        ("simple", "vega"),
         key="chart_format",
         index=0,
         on_change=initialize_c2p,
