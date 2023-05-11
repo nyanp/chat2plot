@@ -220,7 +220,31 @@ def chat2plot(
         )
 
 
+def _extract_tag_content(s: str, tag: str) -> str:
+    m = re.search(fr"<{tag}>(.*)</{tag}>", s, re.MULTILINE | re.DOTALL)
+    if m:
+        return m.group(1)
+    else:
+        m = re.search(fr"<{tag}>(.*)<{tag}>", s, re.MULTILINE | re.DOTALL)
+        if m:
+            return m.group(1)
+    return ""
+
+
 def parse_json(content: str) -> tuple[str, dict[str, Any]]:
+
+    json_part = _extract_tag_content(content, "json")  # type: ignore
+    if not json_part:
+        raise ValueError("failed to find <json> and </json> tags")
+
+    explanation_part = _extract_tag_content(content, "explain")
+    if not explanation_part:
+        explanation_part = _extract_tag_content(content, "explanation")
+
+    return explanation_part.strip(), json.loads(json_part)
+
+
+def _parse_json(content: str) -> tuple[str, dict[str, Any]]:
     ptn = r"```json(.*)```" if "```json" in content else r"```(.*)```"
     s = re.search(ptn, content, re.MULTILINE | re.DOTALL)
     if s:

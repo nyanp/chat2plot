@@ -41,6 +41,8 @@ def draw_plotly(df: pd.DataFrame, config: PlotConfig, show: bool = True) -> Figu
     chart_type = config.chart_type
 
     if chart_type in [ChartType.BAR, ChartType.HORIZONTAL_BAR]:
+        if chart_type == ChartType.HORIZONTAL_BAR and config.x.transform.aggregation:
+            config = config.transpose()
         agg = groupby_agg(df_filtered, config)
         x = agg.columns[0]
         y = agg.columns[-1]

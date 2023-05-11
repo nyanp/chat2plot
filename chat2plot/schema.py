@@ -1,3 +1,4 @@
+import copy
 import re
 from enum import Enum
 from typing import Any
@@ -157,6 +158,12 @@ class PlotConfig(pydantic.BaseModel):
     sort_order: SortOrder | None = pydantic.Field(
         None, description="Sorting order for x-axis"
     )
+
+    def transpose(self) -> "PlotConfig":
+        transposed = copy.deepcopy(self)
+        transposed.y = self.x
+        transposed.x = self.y
+        return transposed
 
     @property
     def required_columns(self) -> list[str]:

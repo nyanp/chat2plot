@@ -14,14 +14,12 @@ def error_correction_prompt(model_type: str = "default") -> str:
         {question}
         
         Your response:
-        ```
         {response}
-        ```
         
         It fails with the following error:
         {error_message}
         
-        Correct the json and return a new json (do not import anything) that fixes the above mentioned error.
+        Correct the json and return a new explanation and json that fixes the above mentioned error.
         Do not generate the same json again.
     """)
 
@@ -55,7 +53,8 @@ def _data_and_detailed_instruction_part() -> str:
         You should do the following step by step, and your response should include both 1 and 2:
         1. Explain whether filters should be applied to the data, which chart_type and columns should be used, and what transformations are necessary to fulfill the user's request.
            Answers should be in the same language as the user and be understandable to someone who does not know the JSON schema definition.
+           This text should be enclosed with <explain> and </explain> tag.
         2. Generate schema-compliant JSON that represents 1.
-        
-        Make sure to prefix the requested json string with triple backticks exactly and suffix the json with triple backticks exactly.
+           This text should be enclosed with <json> and </json> tag.
+
         """)
