@@ -42,10 +42,17 @@ except ModuleNotFoundError:
     dynamic_install(f"git+https://{github_token}@github.com/nyanp/chat2plot.git")
 
 
-logger = logging.getLogger("root")
-handler = logging.StreamHandler(sys.stdout)
-logger.setLevel(logging.INFO)
-logger.addHandler(handler)
+def initialize_logger():
+    logger = logging.getLogger("root")
+    handler = logging.StreamHandler(sys.stdout)
+    logger.setLevel(logging.INFO)
+    logger.addHandler(handler)
+    return logger
+
+
+if 'logger' not in st.session_state:
+    st.session_state['logger'] = initialize_logger()
+
 
 api_key = st.text_input("Step1: Input your OpenAI API-KEY", value="")
 csv_file = st.file_uploader("Step2: Upload csv file", type={"csv"})
