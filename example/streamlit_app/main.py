@@ -46,8 +46,8 @@ def initialize_logger():
     logger = logging.getLogger("root")
     handler = logging.StreamHandler(sys.stdout)
     logger.setLevel(logging.INFO)
-    logger.addHandler(handler)
-    return logger
+    logger.handlers = [handler]
+    return True
 
 
 if 'logger' not in st.session_state:
