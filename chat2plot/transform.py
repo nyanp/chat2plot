@@ -1,6 +1,4 @@
 import copy
-import re
-
 
 import numpy as np
 import pandas as pd
@@ -11,10 +9,6 @@ from chat2plot.schema import PlotConfig, Axis, TimeUnit
 
 def transform(df: pd.DataFrame, config: PlotConfig) -> tuple[pd.DataFrame, PlotConfig]:
     config = copy.deepcopy(config)
-
-    for col in config.required_columns:
-        if col not in df:
-            df[col] = transform_one(df, col, config)
 
     if config.x and config.x.transform:
         x_trans = _transform(df, config.x)
@@ -42,22 +36,6 @@ def _transform(df: pd.DataFrame, ax: Axis) -> pd.Series:
         dst = round_datetime(dst, ax.transform.time_unit)
 
     return pd.Series(dst.values, name=ax.transformed_name())
-
-
-def transform_one(df: pd.DataFrame, col: str, config: PlotConfig) -> pd.Series:
-    m = re.match(r"BINNING\((.*),(.*)\)", col)
-    if m:
-        col = m.group(1).strip()
-        interval = int(m.group(2).strip())
-        return binning(df[col], interval)
-
-    m = re.match(r"ROUND_DATETIME\((.*),(.*)\)", col)
-    if m:
-        col = m.group(1).strip()
-        period = m.group(2).strip()
-        return round_datetime(df[col], period)
-
-    raise ValueError(f"Unknown column transform: {col}")
 
 
 def binning(series: pd.Series, interval: int) -> pd.Series:

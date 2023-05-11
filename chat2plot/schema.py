@@ -1,18 +1,11 @@
 import re
 from enum import Enum
-from typing import Any, Type
+from typing import Any
 
 import jsonref
 import pydantic
 
 from chat2plot.dictionary_helper import remove_field_recursively, flatten_single_element_allof
-
-
-class SchemaWithoutTitle:
-    @staticmethod
-    def schema_extra(schema: dict[str, Any], _: Type[Any]) -> None:
-        for prop in schema.get("properties", {}).values():
-            prop.pop("title", None)
 
 
 class ChartType(str, Enum):
@@ -92,17 +85,11 @@ class Transform(pydantic.BaseModel):
             time_unit=d.get("time_unit") or None
         )
 
-    class Config(SchemaWithoutTitle):
-        pass
-
 
 class Filter(pydantic.BaseModel):
     lhs: str
     rhs: str
     op: str
-
-    class Config(SchemaWithoutTitle):
-        pass
 
     def escaped(self) -> str:
         lhs = f"`{self.lhs}`" if self.lhs[0] != "`" else self.lhs
@@ -134,9 +121,6 @@ class Axis(pydantic.BaseModel):
 
     def transformed_name(self):
         return self.transform.transformed_name(self.column) if self.transform else self.column
-
-    class Config(SchemaWithoutTitle):
-        pass
 
     @classmethod
     def parse_from_llm(cls, d: dict[str, str | float | dict[str, str]]) -> "Axis":
@@ -173,9 +157,6 @@ class PlotConfig(pydantic.BaseModel):
     sort_order: SortOrder | None = pydantic.Field(
         None, description="Sorting order for x-axis"
     )
-
-    class Config(SchemaWithoutTitle):
-        pass
 
     @property
     def required_columns(self) -> list[str]:

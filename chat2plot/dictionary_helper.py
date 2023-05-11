@@ -1,5 +1,4 @@
-from typing import Any, Callable
-
+from typing import Any
 
 
 def remove_field_recursively(d: Any, field: str) -> Any:
