@@ -4,11 +4,11 @@ from textwrap import dedent
 from chat2plot.schema import get_schema_of_chart_config
 
 
-def system_prompt(model_type: str = "default") -> str:
+def system_prompt(model_type: str = "simple") -> str:
     return _task_definition_part(model_type) + "\n" + _data_and_detailed_instruction_part()
 
 
-def error_correction_prompt(model_type: str = "default") -> str:
+def error_correction_prompt(model_type: str = "simple") -> str:
     return system_prompt(model_type) + dedent("""
         The user asked the following question:
         {question}
@@ -25,7 +25,7 @@ def error_correction_prompt(model_type: str = "default") -> str:
 
 
 def _task_definition_part(model_type: str) -> str:
-    if model_type == "default":
+    if model_type == "simple":
         schema_json = json.dumps(get_schema_of_chart_config(inlining_refs=False, remove_title=True), indent=2)
 
         return dedent("""

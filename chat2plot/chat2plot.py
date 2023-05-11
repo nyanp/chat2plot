@@ -94,7 +94,7 @@ class Chat2Plot(Chat2PlotBase):
     def __init__(
         self, df: pd.DataFrame, chat: BaseChatModel | None = None, verbose: bool = False
     ):
-        self._session = ChatSession(df, system_prompt("default"), "<{text}>", chat)
+        self._session = ChatSession(df, system_prompt("simple"), "<{text}>", chat)
         self._df = df
         self._verbose = verbose
 
@@ -113,7 +113,7 @@ class Chat2Plot(Chat2PlotBase):
                 _logger.warning(traceback.format_exc())
 
             msg = e.message if isinstance(e, jsonschema.ValidationError) else str(e)
-            error_correction = error_correction_prompt("default").format(
+            error_correction = error_correction_prompt("simple").format(
                 dataset=description(self._df),
                 question=q,
                 response=raw_response,
@@ -206,11 +206,11 @@ class Chat2Vega(Chat2PlotBase):
 
 def chat2plot(
     df: pd.DataFrame,
-    model_type: str = "default",
+    model_type: str = "simple",
     chat: BaseChatModel | None = None,
     verbose: bool = False,
 ) -> Chat2PlotBase:
-    if model_type == "default":
+    if model_type == "simple":
         return Chat2Plot(df, chat, verbose)
     elif model_type == "vega":
         return Chat2Vega(df, chat, verbose)
