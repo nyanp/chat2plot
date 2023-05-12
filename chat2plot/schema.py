@@ -52,6 +52,12 @@ class TimeUnit(str, Enum):
     DAY = "day"
 
 
+class BarMode(str, Enum):
+    STACK = "stacked"
+    GROUP = "group"
+
+
+
 class Transform(pydantic.BaseModel):
     aggregation: AggregationType | None = pydantic.Field(
         None,
@@ -114,8 +120,8 @@ class Filter(pydantic.BaseModel):
 
 
 class Axis(pydantic.BaseModel):
-    column: str = pydantic.Field(None, description="column in datasets used for the axis")
-    transform: Transform | None = pydantic.Field(None, description="transformation applied to column")
+    column: str = pydantic.Field(description="column in datasets used for the axis")
+    transform: Transform = pydantic.Field(None, description="transformation applied to column")
     min_value: float | None
     max_value: float | None
     label: str | None
@@ -135,9 +141,8 @@ class Axis(pydantic.BaseModel):
 
 
 class PlotConfig(pydantic.BaseModel):
-    chart_type: ChartType = pydantic.Field(None, description="the type of the chart")
+    chart_type: ChartType = pydantic.Field(description="the type of the chart")
     filters: list[str] = pydantic.Field(
-        None,
         description="List of filter conditions, where each filter must be a legal string that can be passed to df.query(),"
         ' such as "x >= 0". Filters will be calculated before transforming axis.',
     )
@@ -145,12 +150,15 @@ class PlotConfig(pydantic.BaseModel):
         None, description="X-axis for the chart, or label column for pie chart"
     )
     y: Axis = pydantic.Field(
-        None,
         description="Y-axis or measure value for the chart, or the wedge sizes for pie chart.",
     )
-    hue: str | None = pydantic.Field(
+    color: str | None = pydantic.Field(
         None,
         description="Column name used as grouping variables that will produce different colors.",
+    )
+    bar_mode: BarMode | None = pydantic.Field(
+        None,
+        description="If 'stacked', bars are stacked. In 'group' mode, bars are placed beside each other."
     )
     sort_criteria: SortingCriteria | None = pydantic.Field(
         None, description="The sorting criteria for x-axis"
@@ -190,7 +198,8 @@ class PlotConfig(pydantic.BaseModel):
             x=Axis.parse_from_llm(json_data["x"]) if json_data.get("x") else None,
             y=Axis.parse_from_llm(json_data["y"]),
             filters=wrap_if_not_list(json_data.get("filters", [])),
-            hue=json_data.get("hue") or None,
+            color=json_data.get("color") or None,
+            bar_mode=BarMode(json_data["bar_mode"]) if json_data.get("bar_mode") else None,
             sort_criteria=SortingCriteria(json_data["sort_criteria"])
             if json_data.get("sort_criteria")
             else None,

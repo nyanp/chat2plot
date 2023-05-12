@@ -52,6 +52,10 @@ def binning(series: pd.Series, interval: int) -> pd.Series:
 
 
 def round_datetime(series: pd.Series, period: TimeUnit) -> pd.Series:
+    if is_integer_dtype(series) and period == TimeUnit.YEAR:
+        # assuming that it is year column, so no transform is needed
+        return series
+
     series = pd.to_datetime(series)
 
     period_map = {TimeUnit.DAY: "D", TimeUnit.WEEK: "W", TimeUnit.MONTH: "M", TimeUnit.QUARTER: "Q", TimeUnit.YEAR: "Y"}

@@ -241,19 +241,5 @@ def parse_json(content: str) -> tuple[str, dict[str, Any]]:
     if not explanation_part:
         explanation_part = _extract_tag_content(content, "explanation")
 
-    return explanation_part.strip(), json.loads(json_part)
+    return explanation_part.strip(), delete_null_field(json.loads(json_part))
 
-
-def _parse_json(content: str) -> tuple[str, dict[str, Any]]:
-    ptn = r"```json(.*)```" if "```json" in content else r"```(.*)```"
-    s = re.search(ptn, content, re.MULTILINE | re.DOTALL)
-    if s:
-        json_part = json.loads(s.group(1))  # type: ignore
-        non_json_part = content.replace(s.group(0), "")
-        return non_json_part, delete_null_field(json_part)
-
-    try:
-        json_part = json.loads(content)
-        return "", json_part
-    except Exception:
-        raise ValueError("failed to find start(```) and end(```) marker")

@@ -10,6 +10,7 @@ from plotly.graph_objs import Figure
 
 from chat2plot.schema import (
     AggregationType,
+    BarMode,
     ChartType,
     Filter,
     PlotConfig,
@@ -47,6 +48,7 @@ def draw_plotly(df: pd.DataFrame, config: PlotConfig, show: bool = True) -> Figu
         x = agg.columns[0]
         y = agg.columns[-1]
         orientation = "v"
+        bar_mode = "group" if config.bar_mode == BarMode.GROUP else "relative"
 
         if chart_type == ChartType.HORIZONTAL_BAR:
             x, y = y, x
@@ -54,15 +56,16 @@ def draw_plotly(df: pd.DataFrame, config: PlotConfig, show: bool = True) -> Figu
 
         fig = px.bar(
             agg,
-            color=config.hue or None,
+            color=config.color or None,
             orientation=orientation,
+            barmode=bar_mode,
             **_ax_config(config, x, y),
         )
     elif chart_type == ChartType.SCATTER:
         assert config.x is not None
         fig = px.scatter(
             df_filtered,
-            color=config.hue or None,
+            color=config.color or None,
             **_ax_config(config, config.x.column, config.y.column),
         )
     elif chart_type == ChartType.PIE:
@@ -80,7 +83,7 @@ def draw_plotly(df: pd.DataFrame, config: PlotConfig, show: bool = True) -> Figu
             assert config.x is not None
             fig = func_table[chart_type](
                 df_filtered,
-                color=config.hue or None,
+                color=config.color or None,
                 **_ax_config(config, config.x.column, config.y.column),
             )
     else:
@@ -112,8 +115,8 @@ def draw_altair(
 def groupby_agg(df: pd.DataFrame, config: PlotConfig) -> pd.DataFrame:
     group_by = [config.x.column] if config.x is not None else []
 
-    if config.hue and (not config.x or (config.hue != config.x.column)):
-        group_by.append(config.hue)
+    if config.color and (not config.x or (config.color != config.x.column)):
+        group_by.append(config.color)
 
     agg_method = {
         AggregationType.AVG: "mean",
@@ -155,12 +158,19 @@ def filter_data(df: pd.DataFrame, filters: list[str]) -> pd.DataFrame:
     if not filters:
         return df
 
-    elements = []
-    for f in filters:
-        try:
-            e = Filter.parse_from_llm(f).escaped()
-        except Exception:
-            e = f
-        elements.append(f"({e})")
+    def _filter_data(df: pd.DataFrame, filters: list[str], with_escape: bool) -> pd.DataFrame:
+        if with_escape:
+            return df.query(" and ".join([Filter.parse_from_llm(f).escaped() for f in filters]))
+        else:
+            return df.query(" and ".join(filters))
 
-    return df.query(" and ".join(elements))
+    # 1. LLM sometimes forgets to escape column names when necessary.
+    #    In this case, adding escaping will handle it correctly.
+    # 2. LLM sometimes writes multiple OR conditions in one filter.
+    #    In this case, adding escapes leads to errors.
+    # Since both cases exist, add escapes and retry only when an error occurs.
+    try:
+        return _filter_data(df, filters, False)
+    except Exception:
+        return _filter_data(df, filters, True)
+
