@@ -31,7 +31,6 @@ class AggregationType(str, Enum):
 
 class ResponseType(str, Enum):
     SUCCESS = "success"
-    NOT_RELATED = "not related"
     UNKNOWN = "unknown"
     FAILED_TO_RENDER = "failed to render"
 
@@ -200,7 +199,11 @@ class PlotConfig(pydantic.BaseModel):
             else:
                 return value
 
-        if not json_data.get("x") or json_data["x"] == "none":
+        if (
+            not json_data.get("x")
+            or not json_data["chart_type"]
+            or json_data["chart_type"].lower() == "none"
+        ):
             # treat chart as bar if x-axis does not exist
             chart_type = ChartType.BAR
         else:

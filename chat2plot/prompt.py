@@ -10,16 +10,10 @@ def system_prompt(model_type: str = "simple") -> str:
     )
 
 
-def error_correction_prompt(model_type: str = "simple") -> str:
-    return system_prompt(model_type) + dedent(
+def error_correction_prompt() -> str:
+    return dedent(
         """
-        The user asked the following question:
-        {question}
-        
-        Your response:
-        {response}
-        
-        It fails with the following error:
+        Your response fails with the following error:
         {error_message}
         
         Correct the json and return a new explanation and json that fixes the above mentioned error.

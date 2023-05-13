@@ -1,4 +1,4 @@
-import json
+import copy
 import re
 import traceback
 from dataclasses import dataclass
@@ -29,7 +29,7 @@ class Plot:
     config: PlotConfig | dict[str, Any] | None
     response_type: ResponseType
     explanation: str
-    raw_response: str
+    conversation_history: list[BaseMessage] | None
 
 
 class ChatSession:
@@ -53,7 +53,7 @@ class ChatSession:
 
     @property
     def history(self) -> list[BaseMessage]:
-        return list(self._conversation_history)
+        return copy.deepcopy(self._conversation_history)
 
     def set_chatmodel(self, chat: BaseChatModel) -> None:
         self._chat = chat
@@ -114,13 +114,10 @@ class Chat2Plot(Chat2PlotBase):
                 _logger.warning(traceback.format_exc())
 
             msg = e.message if isinstance(e, jsonschema.ValidationError) else str(e)
-            error_correction = error_correction_prompt("simple").format(
-                dataset=description(self._df),
-                question=q,
-                response=raw_response,
+            error_correction = error_correction_prompt().format(
                 error_message=msg,
             )
-            corrected_response = self._session.query_without_history(error_correction)
+            corrected_response = self._session.query(error_correction)
             if self._verbose:
                 _logger.info(f"retry response: {corrected_response}")
 
@@ -134,8 +131,8 @@ class Chat2Plot(Chat2PlotBase):
                     None,
                     None,
                     ResponseType.FAILED_TO_RENDER,
-                    corrected_response,
-                    corrected_response,
+                    "",
+                    self._session.history,
                 )
 
     def __call__(
@@ -149,9 +146,6 @@ class Chat2Plot(Chat2PlotBase):
         return draw_plotly(df, config, show_plot)
 
     def _parse_response(self, content: str, config_only: bool, show_plot: bool) -> Plot:
-        if content == "not related":
-            return Plot(None, None, ResponseType.NOT_RELATED, content, content)
-
         explanation, json_data = parse_json(content)
 
         try:
@@ -166,10 +160,14 @@ class Chat2Plot(Chat2PlotBase):
             _logger.info(config)
 
         if config_only:
-            return Plot(None, config, ResponseType.SUCCESS, explanation, content)
+            return Plot(
+                None, config, ResponseType.SUCCESS, explanation, self._session.history
+            )
 
         figure = self.render(self._df, config, show_plot)
-        return Plot(figure, config, ResponseType.SUCCESS, explanation, content)
+        return Plot(
+            figure, config, ResponseType.SUCCESS, explanation, self._session.history
+        )
 
 
 class Chat2Vega(Chat2PlotBase):
@@ -186,8 +184,6 @@ class Chat2Vega(Chat2PlotBase):
 
     def query(self, q: str, config_only: bool = False, show_plot: bool = False) -> Plot:
         res = self._session.query(q)
-        if res == "not related":
-            return Plot(None, None, ResponseType.NOT_RELATED, res, res)
 
         try:
             explanation, config = parse_json(res)
@@ -198,17 +194,27 @@ class Chat2Vega(Chat2PlotBase):
         except Exception:
             _logger.warning(f"failed to parse LLM response: {res}")
             _logger.warning(traceback.format_exc())
-            return Plot(None, None, ResponseType.UNKNOWN, res, res)
+            return Plot(None, None, ResponseType.UNKNOWN, res, self._session.history)
 
         if config_only:
-            return Plot(None, config, ResponseType.SUCCESS, explanation, res)
+            return Plot(
+                None, config, ResponseType.SUCCESS, explanation, self._session.history
+            )
 
         try:
             plot = draw_altair(self._df, config, show_plot)
-            return Plot(plot, config, ResponseType.SUCCESS, explanation, res)
+            return Plot(
+                plot, config, ResponseType.SUCCESS, explanation, self._session.history
+            )
         except Exception:
             _logger.warning(traceback.format_exc())
-            return Plot(None, config, ResponseType.FAILED_TO_RENDER, explanation, res)
+            return Plot(
+                None,
+                config,
+                ResponseType.FAILED_TO_RENDER,
+                explanation,
+                self._session.history,
+            )
 
     def __call__(
         self, q: str, config_only: bool = False, show_plot: bool = False

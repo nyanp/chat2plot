@@ -149,12 +149,10 @@ if api_key and csv_file:
                     else:
                         st.vega_lite_chart(df, res.config, use_container_width=True)
             else:
-                if res.response_type == ResponseType.NOT_RELATED:
-                    message(
-                        "This chat accepts queries to visualize the given data. Please provide a question about the data.",
-                        key=str(i),
-                    )
-                else:
-                    message(res.raw_response, key=str(i))
+                st.warning(
+                    f"Failed to render chart. last message: {res.conversation_history[-1].content}",
+                    icon="⚠️",
+                )
+                # message(res.conversation_history[-1].content, key=str(i))
 
             message(st.session_state["past"][i], is_user=True, key=str(i) + "_user")
