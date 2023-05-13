@@ -15,7 +15,6 @@ class ChartType(str, Enum):
     LINE = "line"
     BAR = "bar"
     AREA = "area"
-    HORIZONTAL_BAR = "horizontal-bar"
 
 
 class AggregationType(str, Enum):
@@ -166,6 +165,10 @@ class PlotConfig(pydantic.BaseModel):
     sort_order: SortOrder | None = pydantic.Field(
         None, description="Sorting order for x-axis"
     )
+    horizontal: bool | None = pydantic.Field(
+        None,
+        description="If true, the chart is drawn in a horizontal orientation"
+    )
 
     def transpose(self) -> "PlotConfig":
         transposed = copy.deepcopy(self)
@@ -206,6 +209,7 @@ class PlotConfig(pydantic.BaseModel):
             sort_order=SortOrder(json_data["sort_order"])
             if json_data.get("sort_order")
             else None,
+            horizontal=json_data.get("horizontal")
         )
 
 

@@ -41,8 +41,8 @@ def draw_plotly(df: pd.DataFrame, config: PlotConfig, show: bool = True) -> Figu
 
     chart_type = config.chart_type
 
-    if chart_type in [ChartType.BAR, ChartType.HORIZONTAL_BAR]:
-        if chart_type == ChartType.HORIZONTAL_BAR and config.x.transform.aggregation:
+    if chart_type == ChartType.BAR:
+        if config.horizontal:
             config = config.transpose()
         agg = groupby_agg(df_filtered, config)
         x = agg.columns[0]
@@ -50,7 +50,7 @@ def draw_plotly(df: pd.DataFrame, config: PlotConfig, show: bool = True) -> Figu
         orientation = "v"
         bar_mode = "group" if config.bar_mode == BarMode.GROUP else "relative"
 
-        if chart_type == ChartType.HORIZONTAL_BAR:
+        if config.horizontal:
             x, y = y, x
             orientation = "h"
 
@@ -128,16 +128,16 @@ def groupby_agg(df: pd.DataFrame, config: PlotConfig) -> pd.DataFrame:
     }
 
     y = config.y
-    assert y.transform.aggregation is not None
+    aggregation = y.transform.aggregation or AggregationType.AVG
 
     if not group_by:
         return pd.DataFrame(
-            {y.transformed_name(): [df[y.column].agg(agg_method[y.transform.aggregation])]}
+            {y.transformed_name(): [df[y.column].agg(agg_method[aggregation])]}
         )
     else:
         agg = (
             df.groupby(group_by, dropna=False)[y.column]
-            .agg(agg_method[y.transform.aggregation])
+            .agg(agg_method[aggregation])
             .rename(y.transformed_name())
         )
         ascending = config.sort_order == SortOrder.ASC
