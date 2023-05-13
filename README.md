@@ -4,6 +4,8 @@ Chat2plot is a project that provides visualizations based on chat instructions f
 
 demo: https://chat2plot-sample.streamlit.app/
 
+![sample](sample.png)
+
 ## Usage
 
 ```Python
