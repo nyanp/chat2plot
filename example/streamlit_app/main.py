@@ -50,8 +50,8 @@ def initialize_logger():
     return True
 
 
-if 'logger' not in st.session_state:
-    st.session_state['logger'] = initialize_logger()
+if "logger" not in st.session_state:
+    st.session_state["logger"] = initialize_logger()
 
 
 api_key = st.text_input("Step1: Input your OpenAI API-KEY", value="")

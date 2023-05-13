@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import is_integer_dtype
 
-from chat2plot.schema import PlotConfig, Axis, TimeUnit
+from chat2plot.schema import Axis, PlotConfig, TimeUnit
 
 
 def transform(df: pd.DataFrame, config: PlotConfig) -> tuple[pd.DataFrame, PlotConfig]:
@@ -58,5 +58,11 @@ def round_datetime(series: pd.Series, period: TimeUnit) -> pd.Series:
 
     series = pd.to_datetime(series)
 
-    period_map = {TimeUnit.DAY: "D", TimeUnit.WEEK: "W", TimeUnit.MONTH: "M", TimeUnit.QUARTER: "Q", TimeUnit.YEAR: "Y"}
+    period_map = {
+        TimeUnit.DAY: "D",
+        TimeUnit.WEEK: "W",
+        TimeUnit.MONTH: "M",
+        TimeUnit.QUARTER: "Q",
+        TimeUnit.YEAR: "Y",
+    }
     return series.dt.to_period(period_map.get(period, period)).dt.to_timestamp()

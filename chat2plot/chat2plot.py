@@ -14,10 +14,10 @@ from langchain.schema import BaseMessage, HumanMessage, SystemMessage
 from plotly.graph_objs import Figure
 
 from chat2plot.dataset_description import description
+from chat2plot.dictionary_helper import delete_null_field
+from chat2plot.prompt import error_correction_prompt, system_prompt
 from chat2plot.render import draw_altair, draw_plotly
 from chat2plot.schema import PlotConfig, ResponseType
-from chat2plot.dictionary_helper import delete_null_field
-from chat2plot.prompt import system_prompt, error_correction_prompt
 
 _logger = getLogger(__name__)
 
@@ -130,7 +130,11 @@ class Chat2Plot(Chat2PlotBase):
                     _logger.warning(e)
                     _logger.warning(traceback.format_exc())
                 return Plot(
-                    None, None, ResponseType.FAILED_TO_RENDER, corrected_response, corrected_response
+                    None,
+                    None,
+                    ResponseType.FAILED_TO_RENDER,
+                    corrected_response,
+                    corrected_response,
                 )
 
     def __call__(
@@ -221,18 +225,17 @@ def chat2plot(
 
 
 def _extract_tag_content(s: str, tag: str) -> str:
-    m = re.search(fr"<{tag}>(.*)</{tag}>", s, re.MULTILINE | re.DOTALL)
+    m = re.search(rf"<{tag}>(.*)</{tag}>", s, re.MULTILINE | re.DOTALL)
     if m:
         return m.group(1)
     else:
-        m = re.search(fr"<{tag}>(.*)<{tag}>", s, re.MULTILINE | re.DOTALL)
+        m = re.search(rf"<{tag}>(.*)<{tag}>", s, re.MULTILINE | re.DOTALL)
         if m:
             return m.group(1)
     return ""
 
 
 def parse_json(content: str) -> tuple[str, dict[str, Any]]:
-
     json_part = _extract_tag_content(content, "json")  # type: ignore
     if not json_part:
         raise ValueError("failed to find <json> and </json> tags")
@@ -242,4 +245,3 @@ def parse_json(content: str) -> tuple[str, dict[str, Any]]:
         explanation_part = _extract_tag_content(content, "explanation")
 
     return explanation_part.strip(), delete_null_field(json.loads(json_part))
-

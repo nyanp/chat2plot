@@ -158,9 +158,13 @@ def filter_data(df: pd.DataFrame, filters: list[str]) -> pd.DataFrame:
     if not filters:
         return df
 
-    def _filter_data(df: pd.DataFrame, filters: list[str], with_escape: bool) -> pd.DataFrame:
+    def _filter_data(
+        df: pd.DataFrame, filters: list[str], with_escape: bool
+    ) -> pd.DataFrame:
         if with_escape:
-            return df.query(" and ".join([Filter.parse_from_llm(f).escaped() for f in filters]))
+            return df.query(
+                " and ".join([Filter.parse_from_llm(f).escaped() for f in filters])
+            )
         else:
             return df.query(" and ".join(filters))
 
@@ -173,4 +177,3 @@ def filter_data(df: pd.DataFrame, filters: list[str]) -> pd.DataFrame:
         return _filter_data(df, filters, False)
     except Exception:
         return _filter_data(df, filters, True)
-

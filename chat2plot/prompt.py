@@ -5,11 +5,14 @@ from chat2plot.schema import get_schema_of_chart_config
 
 
 def system_prompt(model_type: str = "simple") -> str:
-    return _task_definition_part(model_type) + "\n" + _data_and_detailed_instruction_part()
+    return (
+        _task_definition_part(model_type) + "\n" + _data_and_detailed_instruction_part()
+    )
 
 
 def error_correction_prompt(model_type: str = "simple") -> str:
-    return system_prompt(model_type) + dedent("""
+    return system_prompt(model_type) + dedent(
+        """
         The user asked the following question:
         {question}
         
@@ -21,28 +24,39 @@ def error_correction_prompt(model_type: str = "simple") -> str:
         
         Correct the json and return a new explanation and json that fixes the above mentioned error.
         Do not generate the same json again.
-    """)
+    """
+    )
 
 
 def _task_definition_part(model_type: str) -> str:
     if model_type == "simple":
-        schema_json = json.dumps(get_schema_of_chart_config(inlining_refs=False, remove_title=True), indent=2)
+        schema_json = json.dumps(
+            get_schema_of_chart_config(inlining_refs=False, remove_title=True), indent=2
+        )
 
-        return dedent("""
+        return (
+            dedent(
+                """
             Your task is to generate chart configuration for the given dataset and user question delimited by <>.
             Responses should be in JSON format compliant to the following JSON Schema.
 
-            """) + schema_json.replace("{", "{{").replace("}", "}}")
+            """
+            )
+            + schema_json.replace("{", "{{").replace("}", "}}")
+        )
 
     else:
-        return dedent("""
+        return dedent(
+            """
             Your task is to generate chart configuration for the given dataset and user question delimited by <>.
             Responses should be in JSON format compliant with the vega-lite specification, but `data` field must be excluded.
-            """)
+            """
+        )
 
 
 def _data_and_detailed_instruction_part() -> str:
-    return dedent("""
+    return dedent(
+        """
         Note that the user may want to refine the chart by asking a follow-up question to a previous request, or may want to create a new chart in a completely new context.
         In the latter case, be careful not to use the context used for the previous chart.
         
@@ -57,4 +71,5 @@ def _data_and_detailed_instruction_part() -> str:
         2. Generate schema-compliant JSON that represents 1.
            This text should be enclosed with <json> and </json> tag.
 
-        """)
+        """
+    )

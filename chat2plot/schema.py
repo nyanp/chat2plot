@@ -6,7 +6,10 @@ from typing import Any
 import jsonref
 import pydantic
 
-from chat2plot.dictionary_helper import remove_field_recursively, flatten_single_element_allof
+from chat2plot.dictionary_helper import (
+    flatten_single_element_allof,
+    remove_field_recursively,
+)
 
 
 class ChartType(str, Enum):
@@ -44,7 +47,7 @@ class SortOrder(str, Enum):
 
 
 class TimeUnit(str, Enum):
-    YEAR= "year"
+    YEAR = "year"
     MONTH = "month"
     WEEK = "week"
     QUARTER = "quarter"
@@ -56,7 +59,6 @@ class BarMode(str, Enum):
     GROUP = "group"
 
 
-
 class Transform(pydantic.BaseModel):
     aggregation: AggregationType | None = pydantic.Field(
         None,
@@ -64,11 +66,10 @@ class Transform(pydantic.BaseModel):
     )
     bin_size: int | None = pydantic.Field(
         None,
-        description="Integer value as the number of bins used to discretizes numeric values into a set of bins"
+        description="Integer value as the number of bins used to discretizes numeric values into a set of bins",
     )
     time_unit: TimeUnit | None = pydantic.Field(
-        None,
-        description="The time unit used to descretize date/datetime values"
+        None, description="The time unit used to descretize date/datetime values"
     )
 
     def transformed_name(self, col: str) -> str:
@@ -82,13 +83,13 @@ class Transform(pydantic.BaseModel):
         return dst
 
     @classmethod
-    def parse_from_llm(cls, d: dict[str, str]) -> "Transform":
+    def parse_from_llm(cls, d: dict[str, str | int]) -> "Transform":
         return Transform(
             aggregation=AggregationType(d["aggregation"].upper())
             if d.get("aggregation")
             else None,
-            bin_size=d.get("bin_size") or None,
-            time_unit=d.get("time_unit") or None
+            bin_size=d.get("bin_size") or None,  # type: ignore
+            time_unit=d.get("time_unit") or None,  # type: ignore
         )
 
 
@@ -120,18 +121,24 @@ class Filter(pydantic.BaseModel):
 
 class Axis(pydantic.BaseModel):
     column: str = pydantic.Field(description="column in datasets used for the axis")
-    transform: Transform = pydantic.Field(None, description="transformation applied to column")
+    transform: Transform = pydantic.Field(
+        None, description="transformation applied to column"
+    )
     min_value: float | None
     max_value: float | None
     label: str | None
 
-    def transformed_name(self):
-        return self.transform.transformed_name(self.column) if self.transform else self.column
+    def transformed_name(self) -> str:
+        return (
+            self.transform.transformed_name(self.column)
+            if self.transform
+            else self.column
+        )
 
     @classmethod
     def parse_from_llm(cls, d: dict[str, str | float | dict[str, str]]) -> "Axis":
         return Axis(
-            column=d.get("column") or None,
+            column=d.get("column") or None,  # type: ignore
             transform=Transform.parse_from_llm(d["transform"]) if "transform" in d else None,  # type: ignore
             min_value=d.get("min_value"),  # type: ignore
             max_value=d.get("max_value"),  # type: ignore
@@ -157,7 +164,7 @@ class PlotConfig(pydantic.BaseModel):
     )
     bar_mode: BarMode | None = pydantic.Field(
         None,
-        description="If 'stacked', bars are stacked. In 'group' mode, bars are placed beside each other."
+        description="If 'stacked', bars are stacked. In 'group' mode, bars are placed beside each other.",
     )
     sort_criteria: SortingCriteria | None = pydantic.Field(
         None, description="The sorting criteria for x-axis"
@@ -166,8 +173,7 @@ class PlotConfig(pydantic.BaseModel):
         None, description="Sorting order for x-axis"
     )
     horizontal: bool | None = pydantic.Field(
-        None,
-        description="If true, the chart is drawn in a horizontal orientation"
+        None, description="If true, the chart is drawn in a horizontal orientation"
     )
 
     def transpose(self) -> "PlotConfig":
@@ -202,18 +208,22 @@ class PlotConfig(pydantic.BaseModel):
             y=Axis.parse_from_llm(json_data["y"]),
             filters=wrap_if_not_list(json_data.get("filters", [])),
             color=json_data.get("color") or None,
-            bar_mode=BarMode(json_data["bar_mode"]) if json_data.get("bar_mode") else None,
+            bar_mode=BarMode(json_data["bar_mode"])
+            if json_data.get("bar_mode")
+            else None,
             sort_criteria=SortingCriteria(json_data["sort_criteria"])
             if json_data.get("sort_criteria")
             else None,
             sort_order=SortOrder(json_data["sort_order"])
             if json_data.get("sort_order")
             else None,
-            horizontal=json_data.get("horizontal")
+            horizontal=json_data.get("horizontal"),
         )
 
 
-def get_schema_of_chart_config(inlining_refs: bool = False, remove_title: bool = True) -> dict[str, Any]:
+def get_schema_of_chart_config(
+    inlining_refs: bool = False, remove_title: bool = True
+) -> dict[str, Any]:
     defs = jsonref.loads(PlotConfig.schema_json()) if inlining_refs else PlotConfig.schema()  # type: ignore
 
     if remove_title:
