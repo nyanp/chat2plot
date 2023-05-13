@@ -6,6 +6,8 @@ import pandas as pd
 import plotly.express as px
 import vegafusion as vf
 from altair.utils.data import to_values
+from pandas.api.types import is_integer_dtype
+from pandas.core.groupby.generic import DataFrameGroupBy
 from plotly.graph_objs import Figure
 
 from chat2plot.schema import (
@@ -75,7 +77,9 @@ def draw_plotly(df: pd.DataFrame, config: PlotConfig, show: bool = True) -> Figu
         if is_aggregation(config):
             agg = groupby_agg(df_filtered, config)
             fig = func_table[chart_type](
-                agg, **_ax_config(config, agg.columns[0], y=agg.columns[-1])
+                agg,
+                color=config.color or None,
+                **_ax_config(config, agg.columns[0], y=agg.columns[-1]),
             )
         else:
             assert config.x is not None
@@ -110,6 +114,20 @@ def draw_altair(
     return chart
 
 
+def _is_datetime_like_column(s: pd.Series) -> bool:
+    if is_integer_dtype(s):
+        return False
+    try:
+        pd.to_datetime(s)
+        return True
+    except Exception:
+        try:
+            pd.to_datetime(s, dayfirst=True)
+            return True
+        except Exception:
+            return False
+
+
 def groupby_agg(df: pd.DataFrame, config: PlotConfig) -> pd.DataFrame:
     group_by = [config.x.column] if config.x is not None else []
 
@@ -128,22 +146,28 @@ def groupby_agg(df: pd.DataFrame, config: PlotConfig) -> pd.DataFrame:
     y = config.y
     aggregation = y.aggregation or AggregationType.AVG
 
+    if config.x and config.x.column and _is_datetime_like_column(df[config.x.column]):
+        df = df.copy()
+        df[config.x.column] = pd.to_datetime(df[config.x.column])
+
+    def _apply_agg(
+        aggregation: AggregationType, df: pd.DataFrame | DataFrameGroupBy
+    ) -> Any:
+        if aggregation == AggregationType.COUNTROWS:
+            return len(df) if isinstance(df, pd.DataFrame) else df.size()
+        else:
+            return df[y.column].agg(agg_method[aggregation])
+
     if not group_by:
-        return pd.DataFrame(
-            {y.transformed_name(): [df[y.column].agg(agg_method[aggregation])]}
-        )
+        return pd.DataFrame({y.transformed_name(): [_apply_agg(aggregation, df)]})
     else:
-        agg = (
-            df.groupby(group_by, dropna=False)[y.column]
-            .agg(agg_method[aggregation])
-            .rename(y.transformed_name())
-        )
+        agg = _apply_agg(aggregation, df.groupby(group_by, dropna=False)).rename(y.transformed_name())  # type: ignore
         ascending = config.sort_order == SortOrder.ASC
 
-        if config.sort_criteria == SortingCriteria.NAME:
-            agg = agg.sort_index(ascending=ascending)
-        elif config.sort_criteria == SortingCriteria.VALUE:
+        if config.sort_criteria == SortingCriteria.VALUE:
             agg = agg.sort_values(ascending=ascending)
+        else:
+            agg = agg.sort_index(ascending=ascending, level=0)
 
         return agg.reset_index()
 

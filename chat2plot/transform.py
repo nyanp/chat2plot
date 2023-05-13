@@ -48,7 +48,10 @@ def round_datetime(series: pd.Series, period: TimeUnit) -> pd.Series:
         # assuming that it is year column, so no transform is needed
         return series
 
-    series = pd.to_datetime(series)
+    try:
+        series = pd.to_datetime(series)
+    except Exception:
+        series = pd.to_datetime(series, dayfirst=True)
 
     period_map = {
         TimeUnit.DAY: "D",

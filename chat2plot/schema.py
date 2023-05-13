@@ -1,4 +1,3 @@
-import copy
 import re
 from enum import Enum
 from typing import Any
@@ -26,6 +25,7 @@ class AggregationType(str, Enum):
     MIN = "MIN"
     MAX = "MAX"
     COUNT = "COUNT"
+    COUNTROWS = "COUNTROWS"
     DISTINCT_COUNT = "DISTINCT_COUNT"
 
 
@@ -121,7 +121,7 @@ class YAxis(pydantic.BaseModel):
     column: str = pydantic.Field(description="column in datasets used for the y-axis")
     aggregation: AggregationType | None = pydantic.Field(
         None,
-        description=f"Type of aggregation. It will be ignored when it is scatter plot",
+        description="Type of aggregation. Required for all chart types but scatter plots.",
     )
     min_value: float | None
     max_value: float | None
@@ -141,10 +141,14 @@ class YAxis(pydantic.BaseModel):
         if needs_aggregation and not agg:
             agg = "AVG"
 
+        if not d.get("column") and needs_aggregation:
+            agg = "COUNTROWS"
+        elif agg == "COUNTROWS":
+            agg = "COUNT"
+
         return YAxis(
-            column=d.get("column") or None,  # type: ignore
+            column=d.get("column") or "",  # type: ignore
             aggregation=AggregationType(agg) if agg else None,
-            transform=Transform.parse_from_llm(d["transform"]) if "transform" in d else None,  # type: ignore
             min_value=d.get("min_value"),  # type: ignore
             max_value=d.get("max_value"),  # type: ignore
             label=d.get("label") or None,  # type: ignore
@@ -152,10 +156,13 @@ class YAxis(pydantic.BaseModel):
 
 
 class PlotConfig(pydantic.BaseModel):
-    chart_type: ChartType = pydantic.Field(description="the type of the chart")
+    chart_type: ChartType = pydantic.Field(
+        description="The type of the chart. Use scatter plots as little as possible unless explicitly specified by the user."
+    )
     filters: list[str] = pydantic.Field(
         description="List of filter conditions, where each filter must be a legal string that can be passed to df.query(),"
-        ' such as "x >= 0". Filters will be calculated before transforming axis.',
+        ' such as "x >= 0". Filters are calculated before transforming axes.　'
+        "When using AVG on the y-axis, do not filter the same column to a specific single value.",
     )
     x: XAxis | None = pydantic.Field(
         None, description="X-axis for the chart, or label column for pie chart"
@@ -180,13 +187,6 @@ class PlotConfig(pydantic.BaseModel):
     horizontal: bool | None = pydantic.Field(
         None, description="If true, the chart is drawn in a horizontal orientation"
     )
-
-    @property
-    def required_columns(self) -> list[str]:
-        columns = [self.y.column]
-        if self.x:
-            columns.append(self.x.column)
-        return columns
 
     @classmethod
     def from_json(cls, json_data: dict[str, Any]) -> "PlotConfig":

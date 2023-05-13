@@ -151,6 +151,7 @@ class Chat2Plot(Chat2PlotBase):
         try:
             config = PlotConfig.from_json(json_data)
         except Exception:
+            _logger.warning(traceback.format_exc())
             # To reduce the number of failure cases as much as possible,
             # only check against the json schema when instantiation fails.
             jsonschema.validate(json_data, PlotConfig.schema())

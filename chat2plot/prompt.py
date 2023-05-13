@@ -25,7 +25,7 @@ def error_correction_prompt() -> str:
 def _task_definition_part(model_type: str) -> str:
     if model_type == "simple":
         schema_json = json.dumps(
-            get_schema_of_chart_config(inlining_refs=False, remove_title=True), indent=2
+            get_schema_of_chart_config(inlining_refs=True, remove_title=True), indent=2
         )
 
         return (
