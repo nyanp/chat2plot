@@ -6,6 +6,7 @@ from logging import getLogger
 from typing import Any
 
 import altair as alt
+import commentjson
 import jsonschema
 import pandas as pd
 from langchain.chat_models import ChatOpenAI
@@ -152,8 +153,15 @@ class Chat2Plot(Chat2PlotBase):
             return Plot(None, None, ResponseType.NOT_RELATED, content, content)
 
         explanation, json_data = parse_json(content)
-        jsonschema.validate(json_data, PlotConfig.schema())
-        config = PlotConfig.from_json(json_data)
+
+        try:
+            config = PlotConfig.from_json(json_data)
+        except Exception:
+            # To reduce the number of failure cases as much as possible,
+            # only check against the json schema when instantiation fails.
+            jsonschema.validate(json_data, PlotConfig.schema())
+            raise
+
         if self._verbose:
             _logger.info(config)
 
@@ -244,4 +252,5 @@ def parse_json(content: str) -> tuple[str, dict[str, Any]]:
     if not explanation_part:
         explanation_part = _extract_tag_content(content, "explanation")
 
-    return explanation_part.strip(), delete_null_field(json.loads(json_part))
+    # LLM rarely generates JSON with comments, so use the commentjson package instead of json
+    return explanation_part.strip(), delete_null_field(commentjson.loads(json_part))

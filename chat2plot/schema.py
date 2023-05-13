@@ -59,40 +59,6 @@ class BarMode(str, Enum):
     GROUP = "group"
 
 
-class Transform(pydantic.BaseModel):
-    aggregation: AggregationType | None = pydantic.Field(
-        None,
-        description=f"Type of aggregation. It will be ignored when it is scatter plot",
-    )
-    bin_size: int | None = pydantic.Field(
-        None,
-        description="Integer value as the number of bins used to discretizes numeric values into a set of bins",
-    )
-    time_unit: TimeUnit | None = pydantic.Field(
-        None, description="The time unit used to descretize date/datetime values"
-    )
-
-    def transformed_name(self, col: str) -> str:
-        dst = col
-        if self.time_unit:
-            dst = f"UNIT({col}, {self.time_unit.value})"
-        if self.bin_size:
-            dst = f"BINNING({col}, {self.bin_size})"
-        if self.aggregation:
-            dst = f"{self.aggregation.value}({col})"
-        return dst
-
-    @classmethod
-    def parse_from_llm(cls, d: dict[str, str | int]) -> "Transform":
-        return Transform(
-            aggregation=AggregationType(d["aggregation"].upper())
-            if d.get("aggregation")
-            else None,
-            bin_size=d.get("bin_size") or None,  # type: ignore
-            time_unit=d.get("time_unit") or None,  # type: ignore
-        )
-
-
 class Filter(pydantic.BaseModel):
     lhs: str
     rhs: str
@@ -119,26 +85,66 @@ class Filter(pydantic.BaseModel):
         raise ValueError(f"Unsupported op or failed to parse: {f}")
 
 
-class Axis(pydantic.BaseModel):
-    column: str = pydantic.Field(description="column in datasets used for the axis")
-    transform: Transform = pydantic.Field(
-        None, description="transformation applied to column"
+class XAxis(pydantic.BaseModel):
+    column: str = pydantic.Field(description="column in datasets used for the x-axis")
+    bin_size: int | None = pydantic.Field(
+        None,
+        description="Integer value as the number of bins used to discretizes numeric values into a set of bins",
+    )
+    time_unit: TimeUnit | None = pydantic.Field(
+        None, description="The time unit used to descretize date/datetime values"
     )
     min_value: float | None
     max_value: float | None
     label: str | None
 
     def transformed_name(self) -> str:
-        return (
-            self.transform.transformed_name(self.column)
-            if self.transform
-            else self.column
-        )
+        dst = self.column
+        if self.time_unit:
+            dst = f"UNIT({dst}, {self.time_unit.value})"
+        if self.bin_size:
+            dst = f"BINNING({dst}, {self.bin_size})"
+        return dst
 
     @classmethod
-    def parse_from_llm(cls, d: dict[str, str | float | dict[str, str]]) -> "Axis":
-        return Axis(
+    def parse_from_llm(cls, d: dict[str, str | float | dict[str, str]]) -> "XAxis":
+        return XAxis(
             column=d.get("column") or None,  # type: ignore
+            min_value=d.get("min_value"),  # type: ignore
+            max_value=d.get("max_value"),  # type: ignore
+            label=d.get("label") or None,  # type: ignore
+            bin_size=d.get("bin_size") or None,  # type: ignore
+            time_unit=TimeUnit(d["time_unit"]) if d.get("time_unit") else None,  # type: ignore
+        )
+
+
+class YAxis(pydantic.BaseModel):
+    column: str = pydantic.Field(description="column in datasets used for the y-axis")
+    aggregation: AggregationType | None = pydantic.Field(
+        None,
+        description=f"Type of aggregation. It will be ignored when it is scatter plot",
+    )
+    min_value: float | None
+    max_value: float | None
+    label: str | None
+
+    def transformed_name(self) -> str:
+        dst = self.column
+        if self.aggregation:
+            dst = f"{self.aggregation.value}({dst})"
+        return dst
+
+    @classmethod
+    def parse_from_llm(
+        cls, d: dict[str, str | float | dict[str, str]], needs_aggregation: bool = False
+    ) -> "YAxis":
+        agg = d.get("aggregation")
+        if needs_aggregation and not agg:
+            agg = "AVG"
+
+        return YAxis(
+            column=d.get("column") or None,  # type: ignore
+            aggregation=AggregationType(agg) if agg else None,
             transform=Transform.parse_from_llm(d["transform"]) if "transform" in d else None,  # type: ignore
             min_value=d.get("min_value"),  # type: ignore
             max_value=d.get("max_value"),  # type: ignore
@@ -152,10 +158,10 @@ class PlotConfig(pydantic.BaseModel):
         description="List of filter conditions, where each filter must be a legal string that can be passed to df.query(),"
         ' such as "x >= 0". Filters will be calculated before transforming axis.',
     )
-    x: Axis | None = pydantic.Field(
+    x: XAxis | None = pydantic.Field(
         None, description="X-axis for the chart, or label column for pie chart"
     )
-    y: Axis = pydantic.Field(
+    y: YAxis = pydantic.Field(
         description="Y-axis or measure value for the chart, or the wedge sizes for pie chart.",
     )
     color: str | None = pydantic.Field(
@@ -176,12 +182,6 @@ class PlotConfig(pydantic.BaseModel):
         None, description="If true, the chart is drawn in a horizontal orientation"
     )
 
-    def transpose(self) -> "PlotConfig":
-        transposed = copy.deepcopy(self)
-        transposed.y = self.x
-        transposed.x = self.y
-        return transposed
-
     @property
     def required_columns(self) -> list[str]:
         columns = [self.y.column]
@@ -200,12 +200,22 @@ class PlotConfig(pydantic.BaseModel):
             else:
                 return value
 
-        chart_type = ChartType(json_data["chart_type"])
+        if not json_data.get("x") or json_data["x"] == "none":
+            # treat chart as bar if x-axis does not exist
+            chart_type = ChartType.BAR
+        else:
+            chart_type = ChartType(json_data["chart_type"])
+
+        if not json_data.get("x"):
+            # treat chart as bar if x-axis does not exist
+            chart_type = ChartType.BAR
 
         return cls(
             chart_type=chart_type,
-            x=Axis.parse_from_llm(json_data["x"]) if json_data.get("x") else None,
-            y=Axis.parse_from_llm(json_data["y"]),
+            x=XAxis.parse_from_llm(json_data["x"]) if json_data.get("x") else None,
+            y=YAxis.parse_from_llm(
+                json_data["y"], needs_aggregation=chart_type != ChartType.SCATTER
+            ),
             filters=wrap_if_not_list(json_data.get("filters", [])),
             color=json_data.get("color") or None,
             bar_mode=BarMode(json_data["bar_mode"])
@@ -231,4 +241,4 @@ def get_schema_of_chart_config(
 
     defs = flatten_single_element_allof(defs)
 
-    return defs
+    return defs  # type: ignore

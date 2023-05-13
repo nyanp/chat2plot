@@ -42,8 +42,6 @@ def draw_plotly(df: pd.DataFrame, config: PlotConfig, show: bool = True) -> Figu
     chart_type = config.chart_type
 
     if chart_type == ChartType.BAR:
-        if config.horizontal:
-            config = config.transpose()
         agg = groupby_agg(df_filtered, config)
         x = agg.columns[0]
         y = agg.columns[-1]
@@ -128,7 +126,7 @@ def groupby_agg(df: pd.DataFrame, config: PlotConfig) -> pd.DataFrame:
     }
 
     y = config.y
-    aggregation = y.transform.aggregation or AggregationType.AVG
+    aggregation = y.aggregation or AggregationType.AVG
 
     if not group_by:
         return pd.DataFrame(
@@ -151,7 +149,7 @@ def groupby_agg(df: pd.DataFrame, config: PlotConfig) -> pd.DataFrame:
 
 
 def is_aggregation(config: PlotConfig) -> bool:
-    return config.y.transform and config.y.transform.aggregation is not None
+    return config.y.aggregation is not None
 
 
 def filter_data(df: pd.DataFrame, filters: list[str]) -> pd.DataFrame:

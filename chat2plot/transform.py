@@ -4,36 +4,28 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import is_integer_dtype
 
-from chat2plot.schema import Axis, PlotConfig, TimeUnit
+from chat2plot.schema import PlotConfig, TimeUnit, XAxis
 
 
 def transform(df: pd.DataFrame, config: PlotConfig) -> tuple[pd.DataFrame, PlotConfig]:
     config = copy.deepcopy(config)
 
-    if config.x and config.x.transform:
-        x_trans = _transform(df, config.x)
+    if config.x and (config.x.bin_size or config.x.time_unit):
+        x_trans = _transform_x(df, config.x)
         df[x_trans.name] = x_trans
         config.x.column = x_trans.name
-
-    if config.y.transform:
-        y_trans = _transform(df, config.y)
-        df[y_trans.name] = y_trans
-        config.y.column = y_trans.name
 
     return df, config
 
 
-def _transform(df: pd.DataFrame, ax: Axis) -> pd.Series:
-    if not ax.transform:
-        return df[ax.column]
-
+def _transform_x(df: pd.DataFrame, ax: XAxis) -> pd.Series:
     dst = df[ax.column].copy()
 
-    if ax.transform.bin_size:
-        dst = binning(dst, ax.transform.bin_size)
+    if ax.bin_size:
+        dst = binning(dst, ax.bin_size)
 
-    if ax.transform.time_unit:
-        dst = round_datetime(dst, ax.transform.time_unit)
+    if ax.time_unit:
+        dst = round_datetime(dst, ax.time_unit)
 
     return pd.Series(dst.values, name=ax.transformed_name())
 
