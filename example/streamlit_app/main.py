@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import time
+import traceback
 
 import pandas as pd
 import streamlit as st
@@ -13,7 +14,6 @@ from pydantic import BaseModel
 from streamlit_chat import message
 
 sys.path.append("../../")
-
 
 # From here down is all the StreamLit UI.
 st.set_page_config(page_title="Chat2Plot Demo", page_icon=":robot:", layout="wide")
@@ -49,21 +49,8 @@ def initialize_logger():
     return True
 
 
-def initialize_c2p():
-    st.session_state["chat"] = chat2plot(
-        df, st.session_state["chart_format"], verbose=True
-    )
-
-
-def reset_history():
-    initialize_c2p()
-    st.session_state["generated"] = []
-    st.session_state["past"] = []
-
-
 if "logger" not in st.session_state:
     st.session_state["logger"] = initialize_logger()
-
 
 with st.sidebar:
     model_name = st.selectbox(
@@ -78,19 +65,9 @@ with st.sidebar:
         ),
         index=0,
     )
-    chart_format = st.selectbox(
-        "Chart format",
-        ("simple", "vega"),
-        key="chart_format",
-        index=0,
-        on_change=initialize_c2p,
-    )
-    st.button("Reset conversation history", on_click=reset_history)
-
 
 api_key = st.text_input("Step1: Input your OpenAI API-KEY", value="")
 csv_file = st.file_uploader("Step2: Upload csv file", type={"csv"})
-
 
 if api_key and csv_file:
     os.environ["OPENAI_API_KEY"] = api_key
@@ -107,6 +84,27 @@ if api_key and csv_file:
 
     st.subheader("Chat")
 
+    def initialize_c2p():
+        st.session_state["chat"] = chat2plot(
+            df, st.session_state["chart_format"], verbose=True
+        )
+
+    def reset_history():
+        initialize_c2p()
+        st.session_state["generated"] = []
+        st.session_state["past"] = []
+
+    with st.sidebar:
+        chart_format = st.selectbox(
+            "Chart format",
+            ("simple", "vega"),
+            key="chart_format",
+            index=0,
+            on_change=initialize_c2p,
+        )
+
+        st.button("Reset conversation history", on_click=reset_history)
+
     if "chat" not in st.session_state:
         initialize_c2p()
 
@@ -121,10 +119,13 @@ if api_key and csv_file:
         submit_text = st.session_state["input"]
         st.session_state["input"] = ""
         with st.spinner(text="Wait for LLM response..."):
-            if isinstance(c2p, Chat2Vega):
-                res = c2p(submit_text, config_only=True)
-            else:
-                res = c2p(submit_text, config_only=False, show_plot=False)
+            try:
+                if isinstance(c2p, Chat2Vega):
+                    res = c2p(submit_text, config_only=True)
+                else:
+                    res = c2p(submit_text, config_only=False, show_plot=False)
+            except Exception:
+                res = traceback.format_exc()
         st.session_state.past.append(submit_text)
         st.session_state.generated.append(res)
 
@@ -144,7 +145,10 @@ if api_key and csv_file:
 
                 res = st.session_state["generated"][i]
 
-                if res.response_type == ResponseType.SUCCESS:
+                if isinstance(res, str):
+                    # something went wrong
+                    st.error(res.replace("\n", "\n\n"))
+                elif res.response_type == ResponseType.SUCCESS:
                     message(res.explanation, key=str(i))
 
                     col1, col2 = st.columns([2, 1])
