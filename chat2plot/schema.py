@@ -17,6 +17,7 @@ class ChartType(str, Enum):
     LINE = "line"
     BAR = "bar"
     AREA = "area"
+    SCALAR = "scalar"
 
 
 class AggregationType(str, Enum):
@@ -157,7 +158,7 @@ class YAxis(pydantic.BaseModel):
 
 class PlotConfig(pydantic.BaseModel):
     chart_type: ChartType = pydantic.Field(
-        description="The type of the chart. Use scatter plots as little as possible unless explicitly specified by the user."
+        description="The type of the chart. Use scatter plots as little as possible unless explicitly specified by the user. Choose 'scalar' if we need only single scalar."
     )
     filters: list[str] = pydantic.Field(
         description="List of filter conditions, where each filter must be a legal string that can be passed to df.query(),"
@@ -193,25 +194,24 @@ class PlotConfig(pydantic.BaseModel):
         assert "chart_type" in json_data
         assert "y" in json_data
 
+        json_data = copy.deepcopy(json_data)
+
         def wrap_if_not_list(value: str | list[str]) -> list[str]:
             if not isinstance(value, list):
                 return [] if not value else [value]
             else:
                 return value
 
-        if (
-            not json_data.get("x")
-            or not json_data["chart_type"]
-            or json_data["chart_type"].lower() == "none"
-        ):
+        if not json_data["chart_type"] or json_data["chart_type"].lower() == "none":
             # treat chart as bar if x-axis does not exist
             chart_type = ChartType.BAR
         else:
             chart_type = ChartType(json_data["chart_type"])
 
-        if not json_data.get("x"):
-            # treat chart as bar if x-axis does not exist
-            chart_type = ChartType.BAR
+        if not json_data.get("x") and chart_type == ChartType.PIE:
+            # LLM sometimes forget to fill x in pie-chart
+            json_data["x"] = copy.deepcopy(json_data["y"])
+
 
         return cls(
             chart_type=chart_type,
