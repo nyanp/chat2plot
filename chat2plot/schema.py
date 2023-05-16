@@ -1,3 +1,4 @@
+import copy
 import re
 from enum import Enum
 from typing import Any
@@ -188,6 +189,9 @@ class PlotConfig(pydantic.BaseModel):
     horizontal: bool | None = pydantic.Field(
         None, description="If true, the chart is drawn in a horizontal orientation"
     )
+    limit: int | None = pydantic.Field(
+        None, description="Limit a number of data to top-N items"
+    )
 
     @classmethod
     def from_json(cls, json_data: dict[str, Any]) -> "PlotConfig":
@@ -231,6 +235,7 @@ class PlotConfig(pydantic.BaseModel):
             if json_data.get("sort_order")
             else None,
             horizontal=json_data.get("horizontal"),
+            limit=json_data.get("limit")
         )
 
 
