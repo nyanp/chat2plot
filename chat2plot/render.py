@@ -6,7 +6,7 @@ import pandas as pd
 import plotly.express as px
 import vegafusion as vf
 from altair.utils.data import to_values
-from pandas.api.types import is_integer_dtype
+from pandas.api.types import is_numeric_dtype
 from pandas.core.groupby.generic import DataFrameGroupBy
 from plotly.graph_objs import Figure
 
@@ -115,7 +115,7 @@ def draw_altair(
 
 
 def _is_datetime_like_column(s: pd.Series) -> bool:
-    if is_integer_dtype(s):
+    if is_numeric_dtype(s):
         return False
     try:
         pd.to_datetime(s)
