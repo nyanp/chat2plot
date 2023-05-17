@@ -170,7 +170,7 @@ def groupby_agg(df: pd.DataFrame, config: PlotConfig) -> pd.DataFrame:
             agg = agg.sort_index(ascending=ascending, level=0)
 
         if config.limit:
-            agg = agg.iloc[:config.limit]
+            agg = agg.iloc[: config.limit]
 
         return agg.reset_index()
 

@@ -74,6 +74,8 @@ def chat2plot(
     df: pd.DataFrame,
     model_type: str = "simple",
     chat: langchain.chat_models.base.BaseChatModel | None = None,
+    language: str | None = None,
+    description_strategy: str = "head",
     verbose: bool = False,
 ) -> Chat2PlotBase:
 ```
@@ -84,6 +86,10 @@ def chat2plot(
   - `simple` - A simpler format, parsed as `chat2plot.PlotConfig`
 - **chat** (optional) - The chat instance for interaction with LLMs.
   If omitted, `ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")` will be used.
+- **language** (optional) - Language of explanations. If not specified, it will be automatically inferred from user prompts.
+- **description_strategy** - Type of how the information in the dataset is embedded in the prompt.
+  - `head` - send `df.head(5)` to LLMs.
+  - `dtypes` - send `df.dtypes` to LLMs. This can be used when you do not want to send contents of `df` to LLMs.
 - **verbose** (optional) - If `True`, chat2plot will output logs.
 
 

@@ -86,7 +86,10 @@ if api_key and csv_file:
 
     def initialize_c2p():
         st.session_state["chat"] = chat2plot(
-            df, st.session_state["chart_format"], verbose=True
+            df,
+            st.session_state["chart_format"],
+            verbose=True,
+            description_strategy="dtypes",
         )
 
     def reset_history():

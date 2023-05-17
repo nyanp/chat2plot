@@ -62,8 +62,6 @@ def _data_and_detailed_instruction_part(language: str | None = None) -> str:
         or may want to create a new chart in a completely new context.
         In the latter case, be careful not to use the context used for the previous chart.
 
-        This is the result of `print(df.head())`:
-
         {{dataset}}
 
         You should do the following step by step, and your response should include both 1 and 2:

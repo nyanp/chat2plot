@@ -216,7 +216,6 @@ class PlotConfig(pydantic.BaseModel):
             # LLM sometimes forget to fill x in pie-chart
             json_data["x"] = copy.deepcopy(json_data["y"])
 
-
         return cls(
             chart_type=chart_type,
             x=XAxis.parse_from_llm(json_data["x"]) if json_data.get("x") else None,
@@ -235,7 +234,7 @@ class PlotConfig(pydantic.BaseModel):
             if json_data.get("sort_order")
             else None,
             horizontal=json_data.get("horizontal"),
-            limit=json_data.get("limit")
+            limit=json_data.get("limit"),
         )
 
 

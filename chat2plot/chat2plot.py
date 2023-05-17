@@ -51,6 +51,7 @@ class ChatSession:
         df: pd.DataFrame,
         system_prompt_template: str,
         user_prompt_template: str,
+        description_strategy: str = "head",
         chat: BaseChatModel | None = None,
     ):
         self._system_prompt_template = system_prompt_template
@@ -58,7 +59,9 @@ class ChatSession:
         self._chat = chat or ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")  # type: ignore
         self._conversation_history: list[BaseMessage] = [
             SystemMessage(
-                content=system_prompt_template.format(dataset=description(df))
+                content=system_prompt_template.format(
+                    dataset=description(df, description_strategy)
+                )
             )
         ]
 
@@ -108,10 +111,15 @@ class Chat2Plot(Chat2PlotBase):
         df: pd.DataFrame,
         chat: BaseChatModel | None = None,
         language: str | None = None,
+        description_strategy: str = "head",
         verbose: bool = False,
     ):
         self._session = ChatSession(
-            df, system_prompt("simple", language), "<{text}>", chat
+            df,
+            system_prompt("simple", language),
+            "<{text}>",
+            description_strategy,
+            chat,
         )
         self._df = df
         self._verbose = verbose
@@ -190,10 +198,11 @@ class Chat2Vega(Chat2PlotBase):
         df: pd.DataFrame,
         chat: BaseChatModel | None = None,
         language: str | None = None,
+        description_strategy: str = "head",
         verbose: bool = False,
     ):
         self._session = ChatSession(
-            df, system_prompt("vega", language), "<{text}>", chat
+            df, system_prompt("vega", language), "<{text}>", description_strategy, chat
         )
         self._df = df
         self._verbose = verbose
@@ -247,6 +256,7 @@ def chat2plot(
     model_type: str = "simple",
     chat: BaseChatModel | None = None,
     language: str | None = None,
+    description_strategy: str = "head",
     verbose: bool = False,
 ) -> Chat2PlotBase:
     """Create Chat2Plot instance.
@@ -257,6 +267,10 @@ def chat2plot(
         chat: The chat instance for interaction with LLMs.
               If omitted, `ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")` will be used.
         language: Language of explanations. If not specified, it will be automatically inferred from user prompts.
+        description_strategy: Type of how the information in the dataset is embedded in the prompt.
+              Defaults to "head" which embeds the contents of df.head(5) in the prompt.
+              "dtypes" sends only columns and types to LLMs and does not send the contents of the dataset,
+              which allows for privacy but may reduce accuracy.
         verbose: If `True`, chat2plot will output logs.
 
     Returns:
@@ -264,9 +278,9 @@ def chat2plot(
     """
 
     if model_type == "simple":
-        return Chat2Plot(df, chat, language, verbose)
+        return Chat2Plot(df, chat, language, description_strategy, verbose)
     elif model_type == "vega":
-        return Chat2Vega(df, chat, language, verbose)
+        return Chat2Vega(df, chat, language, description_strategy, verbose)
     else:
         raise ValueError(
             f"model_type should be one of [default, vega] (given: {model_type})"
