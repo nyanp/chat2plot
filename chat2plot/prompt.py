@@ -7,9 +7,11 @@ JSON_TAG = ["<json>", "</json>"]
 EXPLANATION_TAG = ["<explain>", "</explain>"]
 
 
-def system_prompt(model_type: str = "simple") -> str:
+def system_prompt(model_type: str = "simple", language: str | None = None) -> str:
     return (
-        _task_definition_part(model_type) + "\n" + _data_and_detailed_instruction_part()
+        _task_definition_part(model_type)
+        + "\n"
+        + _data_and_detailed_instruction_part(language)
     )
 
 
@@ -52,7 +54,8 @@ def _task_definition_part(model_type: str) -> str:
         )
 
 
-def _data_and_detailed_instruction_part() -> str:
+def _data_and_detailed_instruction_part(language: str | None = None) -> str:
+    language_spec = language or "the same language as the user"
     return dedent(
         f"""
         Note that the user may want to refine the chart by asking a follow-up question to a previous request,
@@ -66,8 +69,8 @@ def _data_and_detailed_instruction_part() -> str:
         You should do the following step by step, and your response should include both 1 and 2:
         1. Explain whether filters should be applied to the data, which chart_type and columns should be used,
            and what transformations are necessary to fulfill the user's request.
-           Answers should be in the same language as the user and be understandable to someone who does not know
-           the JSON schema definition.
+           The explanation MUST be in {language_spec},
+           and be understandable to someone who does not know the JSON schema definition.
            This text should be enclosed with {EXPLANATION_TAG[0]} and {EXPLANATION_TAG[1]} tag.
         2. Generate schema-compliant JSON that represents 1.
            This text should be enclosed with {JSON_TAG[0]} and {JSON_TAG[1]} tag.

@@ -104,9 +104,15 @@ class Chat2PlotBase:
 
 class Chat2Plot(Chat2PlotBase):
     def __init__(
-        self, df: pd.DataFrame, chat: BaseChatModel | None = None, verbose: bool = False
+        self,
+        df: pd.DataFrame,
+        chat: BaseChatModel | None = None,
+        language: str | None = None,
+        verbose: bool = False,
     ):
-        self._session = ChatSession(df, system_prompt("simple"), "<{text}>", chat)
+        self._session = ChatSession(
+            df, system_prompt("simple", language), "<{text}>", chat
+        )
         self._df = df
         self._verbose = verbose
 
@@ -180,9 +186,15 @@ class Chat2Plot(Chat2PlotBase):
 
 class Chat2Vega(Chat2PlotBase):
     def __init__(
-        self, df: pd.DataFrame, chat: BaseChatModel | None = None, verbose: bool = False
+        self,
+        df: pd.DataFrame,
+        chat: BaseChatModel | None = None,
+        language: str | None = None,
+        verbose: bool = False,
     ):
-        self._session = ChatSession(df, system_prompt("vega"), "<{text}>", chat)
+        self._session = ChatSession(
+            df, system_prompt("vega", language), "<{text}>", chat
+        )
         self._df = df
         self._verbose = verbose
 
@@ -234,6 +246,7 @@ def chat2plot(
     df: pd.DataFrame,
     model_type: str = "simple",
     chat: BaseChatModel | None = None,
+    language: str | None = None,
     verbose: bool = False,
 ) -> Chat2PlotBase:
     """Create Chat2Plot instance.
@@ -243,6 +256,7 @@ def chat2plot(
         model_type: Type of json format. "vega" for a vega-lite compliant format, or "simple" or a simpler format.
         chat: The chat instance for interaction with LLMs.
               If omitted, `ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")` will be used.
+        language: Language of explanations. If not specified, it will be automatically inferred from user prompts.
         verbose: If `True`, chat2plot will output logs.
 
     Returns:
@@ -250,9 +264,9 @@ def chat2plot(
     """
 
     if model_type == "simple":
-        return Chat2Plot(df, chat, verbose)
+        return Chat2Plot(df, chat, language, verbose)
     elif model_type == "vega":
-        return Chat2Vega(df, chat, verbose)
+        return Chat2Vega(df, chat, language, verbose)
     else:
         raise ValueError(
             f"model_type should be one of [default, vega] (given: {model_type})"
