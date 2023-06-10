@@ -1,28 +1,34 @@
-from chat2plot import schema
+import pandas as pd
 
-
-def test_field():
-    f = schema.Field.parse_from_llm({"column": "foo"})
-    assert f.column == "foo"
-    assert not f.aggregation
-
-    f = schema.Field.parse_from_llm({"column": "a b c", "aggregation": "SUM"})
-    assert f.column == "a b c"
-    assert f.aggregation == schema.AggregationType.SUM
-
-    # case-insensitive
-    f = schema.Field.parse_from_llm({"column": "あああ", "aggregation": "avg"})
-    assert f.column == "あああ"
-    assert f.aggregation == schema.AggregationType.AVG
+from chat2plot import schema, chat2plot, PlotConfig
 
 
 def test_filter():
     f = schema.Filter.parse_from_llm("a == 3")
-    assert f.lhs == "`a`"
+    assert f.lhs == "a"
     assert f.op == "=="
     assert f.rhs == "3"
+    assert f.escaped() == "`a` == 3"
 
     f = schema.Filter.parse_from_llm("a b c < 4")
-    assert f.lhs == "`a b c`"
+    assert f.lhs == "a b c"
     assert f.op == "<"
     assert f.rhs == "4"
+    assert f.escaped() == "`a b c` < 4"
+
+
+def test_plot_bar():
+    df = pd.DataFrame({
+        "category": ["A", "B", "C", "A", "B"],
+        "price": [100, 200, 100, 150, 250],
+        "x": [1, 2, 3, 4, 5]
+    })
+
+    plot = chat2plot(df)
+    ret = plot.query("Average price per category", config_only=True)
+    config = ret.config
+    assert isinstance(config, PlotConfig)
+    assert config.chart_type == schema.ChartType.BAR
+    assert config.x.column == "category"
+    assert config.y.column == "price"
+    assert config.y.aggregation == schema.AggregationType.AVG
