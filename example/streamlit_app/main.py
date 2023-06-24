@@ -8,7 +8,6 @@ import traceback
 
 import pandas as pd
 import streamlit as st
-from langchain.chat_models import ChatOpenAI
 from plotly.graph_objs import Figure
 from pydantic import BaseModel
 from streamlit_chat import message
@@ -51,18 +50,6 @@ def initialize_logger():
 
 if "logger" not in st.session_state:
     st.session_state["logger"] = initialize_logger()
-
-with st.sidebar:
-    model_name = st.selectbox(
-        "Model type",
-        (
-            "gpt-3.5-turbo-0613",
-            "gpt-3.5-turbo-16k-0613",
-            "gpt-4-0613",
-            "gpt-4-32k-0613",
-        ),
-        index=0,
-    )
 
 api_key = st.text_input("Step1: Input your OpenAI API-KEY", value="")
 csv_file = st.file_uploader("Step2: Upload csv file", type={"csv"})
@@ -110,8 +97,6 @@ if api_key and csv_file:
         initialize_c2p()
 
     c2p = st.session_state["chat"]
-
-    c2p.session.set_chatmodel(ChatOpenAI(temperature=0, model_name=model_name))
 
     chat_container = st.container()
     input_container = st.container()

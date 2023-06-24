@@ -65,31 +65,117 @@ This design limits the visualization expression compared to Python code generati
 - Interactive
     - Declarative data can be modified by the user to improve plots through collaborative work between the user and LLM.
 
-## Usage
+By default, chat2plot uses [function calling API](https://openai.com/blog/function-calling-and-other-api-updates).
+
+## Examples
+
+### Custom language models
+`gpt-3.5-turbo-0613` is used by default, but you can use other language models.
+
+```python
+import pandas as pd
+from langchain.chat_models import AzureChatOpenAI
+from chat2plot import chat2plot
+
+plot = chat2plot(pd.DataFrame(), chat=AzureChatOpenAI())
+ret = plot.query("<your query>")
+```
+
+### Vega-lite format
+
+```python
+import pandas as pd
+from chat2plot import chat2plot
+
+plot = chat2plot(pd.DataFrame(), schema_definition="vega")
+ret = plot.query("<your query>")
+
+assert isinstance(ret.config, dict)  # vega-lite format
+print(ret.config)
+```
+
+### Custom chart definition
+
+```python
+import pydantic
+import pandas as pd
+from chat2plot import chat2plot
+
+class CustomChartConfig(pydantic.BaseModel):
+    chart_type: str
+    x_axis_name: str
+    y_axis_name: str
+    y_axis_aggregate: str
+
+plot = chat2plot(pd.DataFrame(), schema_definition=CustomChartConfig)
+ret = plot.query("<your query>")
+
+# chat2plot treats the data type you pass as a chart setting
+assert isinstance(ret.config, CustomChartConfig)
+```
+
+### Specifying output language
+You can specify in which language the chart explanations should be output. 
+If not specified, it will return as much as possible in the same language as the user's question, 
+but this option is often useful if you always want output in a specific language.
+
+```python
+import pandas as pd
+from chat2plot import chat2plot
+
+plot = chat2plot(pd.DataFrame(), language="Chinese")
+ret = plot.query("<your query>")
+
+print(ret.explanation)  # explanation 
+```
+
+### Privacy preserving
+When `description_strategy="dtypes"` is specified, chat2plot will not send the data 
+content (but just column names) to LLM.
+
+```python
+import pandas as pd
+from langchain.chat_models import AzureChatOpenAI
+from chat2plot import chat2plot
+
+plot = chat2plot(pd.DataFrame(), description_strategy="dtypes")
+ret = plot.query("<your query>")
+```
+
+
+## API
 
 A `Chat2Plot` instance can be created using the `chat2plot` function.
 
 ```Python
 def chat2plot(
     df: pd.DataFrame,
-    model_type: str = "simple",
-    chat: langchain.chat_models.base.BaseChatModel | None = None,
+    schema_definition: Literal["simple", "vega"] | Type[pydantic.BaseModel] = "simple",
+    chat: BaseChatModel | None = None,
+    function_call: bool | Literal["auto"] = "auto",
     language: str | None = None,
     description_strategy: str = "head",
+    custom_deserializer: ModelDeserializer | None = None,
     verbose: bool = False,
 ) -> Chat2PlotBase:
 ```
 
 - **df** - Data source for visualization.
-- **model_type** (optional) - Type of json format.
+- **schema_definition** (optional) - Type of json format.
   - `vega` - A vega-lite compliant format
-  - `simple` - A simpler format, parsed as `chat2plot.PlotConfig`
+  - `simple` - chat2plot's built-in format, parsed as `chat2plot.PlotConfig`
+
+  If you want chat2plot to generate chart definitions according to your own defined schema, 
+  you can pass any type that extends pydantic.BaseModel instead of these two options.
 - **chat** (optional) - The chat instance for interaction with LLMs.
-  If omitted, `ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")` will be used.
+  If omitted, `ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo-0613")` will be used.
+- **function_call** (optional) - Specifies whether to use the [function calling API](https://openai.com/blog/function-calling-and-other-api-updates).
+  If omitted, it is automatically determined based on the underlying model type. 
 - **language** (optional) - Language of explanations. If not specified, it will be automatically inferred from user prompts.
-- **description_strategy** - Type of how the information in the dataset is embedded in the prompt.
+- **description_strategy** (optional) - Type of how the information in the dataset is embedded in the prompt.
   - `head` - send `df.head(5)` to LLMs.
   - `dtypes` - send `df.dtypes` to LLMs. This can be used when you do not want to send contents of `df` to LLMs.
+- **custom_deserializer** (optional) - Specifies a custom deserializer to convert json returned from the LLM into a chart configuration.
 - **verbose** (optional) - If `True`, chat2plot will output logs.
 
 

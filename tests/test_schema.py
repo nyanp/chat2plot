@@ -13,4 +13,3 @@ def test_filter():
     assert f.op == "<"
     assert f.rhs == "4"
     assert f.escaped() == "`a b c` < 4"
-
