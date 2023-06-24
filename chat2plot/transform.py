@@ -1,10 +1,13 @@
 import copy
+from logging import getLogger
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_integer_dtype
+from pandas.api.types import is_integer_dtype, is_numeric_dtype
 
 from chat2plot.schema import PlotConfig, TimeUnit, XAxis
+
+_logger = getLogger(__name__)
 
 
 def transform(df: pd.DataFrame, config: PlotConfig) -> tuple[pd.DataFrame, PlotConfig]:
@@ -21,16 +24,25 @@ def transform(df: pd.DataFrame, config: PlotConfig) -> tuple[pd.DataFrame, PlotC
 def _transform_x(df: pd.DataFrame, ax: XAxis) -> pd.Series:
     dst = df[ax.column].copy()
 
-    if ax.bin_size:
-        dst = binning(dst, ax.bin_size)
+    try:
+        if ax.bin_size:
+            dst = binning(dst, ax.bin_size)
 
-    if ax.time_unit:
-        dst = round_datetime(dst, ax.time_unit)
+        if ax.time_unit:
+            dst = round_datetime(dst, ax.time_unit)
+    except Exception:
+        _logger.warning("transforming x has an error.")
 
     return pd.Series(dst.values, name=ax.transformed_name())
 
 
 def binning(series: pd.Series, interval: int) -> pd.Series:
+    if not is_numeric_dtype(series.dtype):
+        _logger.warning(
+            f"binning on column {series.name} has been skipped because it is not a numerical type"
+        )
+        return series
+
     start_point = np.floor(series.min() / interval) * interval
     end_point = np.ceil((series.max() + 1) / interval) * interval
     bins = pd.interval_range(
@@ -51,7 +63,11 @@ def round_datetime(series: pd.Series, period: TimeUnit) -> pd.Series:
     try:
         series = pd.to_datetime(series)
     except Exception:
-        series = pd.to_datetime(series, dayfirst=True)
+        try:
+            series = pd.to_datetime(series, dayfirst=True)
+        except Exception:
+            _logger.warning(f"Skip to round datetime {series.name}")
+            return series
 
     period_map = {
         TimeUnit.DAY: "D",
