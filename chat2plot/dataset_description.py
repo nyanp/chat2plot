@@ -17,7 +17,10 @@ def description(
 
 
 def description_by_head(df: pd.DataFrame, num_rows: int = 5) -> str:
-    head_part = str(df.sample(num_rows, random_state=0).to_markdown())
+    if len(df) < num_rows:
+        head_part = str(df.to_markdown())
+    else:
+        head_part = str(df.sample(num_rows, random_state=0).to_markdown())
 
     return dedent(
         f"""

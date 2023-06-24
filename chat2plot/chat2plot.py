@@ -79,13 +79,6 @@ class ChatSession:
     def history(self) -> list[BaseMessage]:
         return copy.deepcopy(self._conversation_history)
 
-    def set_chatmodel(self, chat: BaseChatModel) -> None:
-        self._chat = chat
-
-    def query_without_history(self, q: str) -> BaseMessage:
-        response = self._chat([HumanMessage(content=q)])
-        return response
-
     def query(self, q: str, raw: bool = False) -> BaseMessage:
         prompt = q if raw else self._user_prompt_template.format(text=q)
         response = self._query(prompt)
@@ -116,6 +109,10 @@ class Chat2PlotBase:
     @property
     def session(self) -> ChatSession:
         raise NotImplementedError()
+
+    @property
+    def function_call(self) -> bool:
+        return False
 
     def query(self, q: str, config_only: bool = False, show_plot: bool = False) -> Plot:
         raise NotImplementedError()
@@ -171,6 +168,10 @@ class Chat2Plot(Chat2PlotBase):
     @property
     def session(self) -> ChatSession:
         return self._session
+
+    @property
+    def function_call(self) -> bool:
+        return self._function_call
 
     def query(self, q: str, config_only: bool = False, show_plot: bool = False) -> Plot:
         raw_response = self._session.query(q)
@@ -326,21 +327,25 @@ def chat2plot(
     function_call: bool | Literal["auto"] = "auto",
     language: str | None = None,
     description_strategy: str = "head",
-    verbose: bool = False,
     custom_deserializer: ModelDeserializer | None = None,
+    verbose: bool = False,
 ) -> Chat2PlotBase:
     """Create Chat2Plot instance.
 
     Args:
         df: Data source for visualization.
-        schema_definition: Type of json format. "vega" for a vega-lite compliant format, or "simple" or a simpler format.
+        schema_definition: Type of json format; "vega" for vega-lite compliant json, "simple" for chat2plot built-in
+              data structure. If you want a custom schema definition, pass a type inheriting from pydantic.BaseModel
+              as your own chart setting.
         chat: The chat instance for interaction with LLMs.
               If omitted, `ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo-0613")` will be used.
+        function_call:
         language: Language of explanations. If not specified, it will be automatically inferred from user prompts.
         description_strategy: Type of how the information in the dataset is embedded in the prompt.
               Defaults to "head" which embeds the contents of df.head(5) in the prompt.
               "dtypes" sends only columns and types to LLMs and does not send the contents of the dataset,
               which allows for privacy but may reduce accuracy.
+        custom_deserializer: A custom function to convert the json returned by the LLM into a object.
         verbose: If `True`, chat2plot will output logs.
 
     Returns:
