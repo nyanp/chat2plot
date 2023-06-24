@@ -29,4 +29,10 @@ def description_by_head(df: pd.DataFrame, num_rows: int = 5) -> str:
 
 
 def description_by_dtypes(df: pd.DataFrame) -> str:
-    return str(df.dtypes.to_markdown())
+    return dedent(
+        f"""
+        This is the result of `print(df.dtypes)`:
+
+        {str(df.dtypes.to_markdown())}
+        """
+    )

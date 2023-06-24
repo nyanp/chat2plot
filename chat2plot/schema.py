@@ -1,7 +1,7 @@
 import copy
 import re
 from enum import Enum
-from typing import Any
+from typing import Any, Type
 
 import jsonref
 import pydantic
@@ -87,7 +87,9 @@ class Filter(pydantic.BaseModel):
 
 
 class XAxis(pydantic.BaseModel):
-    column: str = pydantic.Field(description="column in datasets used for the x-axis")
+    column: str = pydantic.Field(
+        description="name of the column in the df used for the x-axis"
+    )
     bin_size: int | None = pydantic.Field(
         None,
         description="Integer value as the number of bins used to discretizes numeric values into a set of bins",
@@ -120,7 +122,9 @@ class XAxis(pydantic.BaseModel):
 
 
 class YAxis(pydantic.BaseModel):
-    column: str = pydantic.Field(description="column in datasets used for the y-axis")
+    column: str = pydantic.Field(
+        description="name of the column in the df used for the y-axis"
+    )
     aggregation: AggregationType | None = pydantic.Field(
         None,
         description="Type of aggregation. Required for all chart types but scatter plots.",
@@ -239,13 +243,25 @@ class PlotConfig(pydantic.BaseModel):
 
 
 def get_schema_of_chart_config(
-    inlining_refs: bool = False, remove_title: bool = True
+    target_schema: Type[pydantic.BaseModel],
+    inlining_refs: bool = True,
+    remove_title: bool = True,
+    as_function: bool = False,
 ) -> dict[str, Any]:
-    defs = jsonref.loads(PlotConfig.schema_json()) if inlining_refs else PlotConfig.schema()  # type: ignore
+    defs = jsonref.loads(target_schema.schema_json()) if inlining_refs else target_schema.schema()  # type: ignore
 
     if remove_title:
         defs = remove_field_recursively(defs, "title")
 
     defs = flatten_single_element_allof(defs)
+
+    defs = copy.deepcopy(defs)
+
+    if as_function:
+        return {
+            "name": "generate_chart",
+            "description": "Generate the chart with given parameters",
+            "parameters": defs,
+        }
 
     return defs  # type: ignore
