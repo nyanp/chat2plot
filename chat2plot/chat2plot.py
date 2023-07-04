@@ -232,8 +232,7 @@ class Chat2Plot(Chat2PlotBase):
             if self._custom_deserializer:
                 config = self._custom_deserializer(json_data)
             else:
-                config = pydantic.parse_obj_as(self._target_schema, json_data)
-            # config = self._target_schema.from_json(json_data)
+                config = self._target_schema.parse_obj(json_data)
         except _APPLICATION_ERRORS:
             _logger.warning(traceback.format_exc())
             # To reduce the number of failure cases as much as possible,
@@ -360,7 +359,7 @@ def chat2plot(
             language=language,
             description_strategy=description_strategy,
             verbose=verbose,
-            custom_deserializer=custom_deserializer or PlotConfig.from_json,
+            custom_deserializer=custom_deserializer,
             function_call=function_call,
         )
     if schema_definition == "vega":

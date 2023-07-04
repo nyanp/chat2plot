@@ -97,8 +97,6 @@ class XAxis(pydantic.BaseModel):
     time_unit: TimeUnit | None = pydantic.Field(
         None, description="The time unit used to descretize date/datetime values"
     )
-    min_value: float | None
-    max_value: float | None
     label: str | None
 
     def transformed_name(self) -> str:
@@ -109,17 +107,6 @@ class XAxis(pydantic.BaseModel):
             dst = f"BINNING({dst}, {self.bin_size})"
         return dst
 
-    @classmethod
-    def parse_from_llm(cls, d: dict[str, str | float | dict[str, str]]) -> "XAxis":
-        return XAxis(
-            column=d.get("column") or None,  # type: ignore
-            min_value=d.get("min_value"),  # type: ignore
-            max_value=d.get("max_value"),  # type: ignore
-            label=d.get("label") or None,  # type: ignore
-            bin_size=d.get("bin_size") or None,  # type: ignore
-            time_unit=TimeUnit(d["time_unit"]) if d.get("time_unit") else None,  # type: ignore
-        )
-
 
 class YAxis(pydantic.BaseModel):
     column: str = pydantic.Field(
@@ -129,8 +116,6 @@ class YAxis(pydantic.BaseModel):
         None,
         description="Type of aggregation. Required for all chart types but scatter plots.",
     )
-    min_value: float | None
-    max_value: float | None
     label: str | None
 
     def transformed_name(self) -> str:
@@ -138,28 +123,6 @@ class YAxis(pydantic.BaseModel):
         if self.aggregation:
             dst = f"{self.aggregation.value}({dst})"
         return dst
-
-    @classmethod
-    def parse_from_llm(
-        cls, d: dict[str, str | float | dict[str, str]], needs_aggregation: bool = False
-    ) -> "YAxis":
-        agg = d.get("aggregation")
-        if needs_aggregation and not agg:
-            agg = "AVG"
-
-        if not d.get("column") and needs_aggregation:
-            agg = "COUNTROWS"
-        elif agg == "COUNTROWS":
-            agg = "COUNT"
-
-        return YAxis(
-            column=d.get("column") or "",  # type: ignore
-            aggregation=AggregationType(agg) if agg else None,
-            min_value=d.get("min_value"),  # type: ignore
-            max_value=d.get("max_value"),  # type: ignore
-            label=d.get("label") or None,  # type: ignore
-        )
-
 
 class PlotConfig(pydantic.BaseModel):
     chart_type: ChartType = pydantic.Field(
@@ -197,10 +160,14 @@ class PlotConfig(pydantic.BaseModel):
         None, description="Limit a number of data to top-N items"
     )
 
-    @classmethod
-    def from_json(cls, json_data: dict[str, Any]) -> "PlotConfig":
+    @pydantic.root_validator(pre=True)
+    def validate(cls, json_data: dict[str, Any]) -> dict[str, Any]:
         assert "chart_type" in json_data
         assert "y" in json_data
+
+        if isinstance(json_data["y"], YAxis):
+            # use validator only if json_data is raw dictionary
+            return json_data
 
         json_data = copy.deepcopy(json_data)
 
@@ -213,33 +180,34 @@ class PlotConfig(pydantic.BaseModel):
         if not json_data["chart_type"] or json_data["chart_type"].lower() == "none":
             # treat chart as bar if x-axis does not exist
             chart_type = ChartType.BAR
+        elif json_data["chart_type"] == "histogram":
+            chart_type = ChartType.BAR
         else:
             chart_type = ChartType(json_data["chart_type"])
 
-        if not json_data.get("x") and chart_type == ChartType.PIE:
-            # LLM sometimes forget to fill x in pie-chart
-            json_data["x"] = copy.deepcopy(json_data["y"])
+        if chart_type == ChartType.PIE:
+            if not json_data.get("x"):
+                # LLM sometimes forget to fill x in pie-chart
+                json_data["x"] = copy.deepcopy(json_data["y"])
+            elif not json_data["y"].get("column") and json_data["x"].get("column"):
+                # ...and vice versa.
+                json_data["y"]["column"] = copy.deepcopy(json_data["x"]["column"])
 
-        return cls(
-            chart_type=chart_type,
-            x=XAxis.parse_from_llm(json_data["x"]) if json_data.get("x") else None,
-            y=YAxis.parse_from_llm(
-                json_data["y"], needs_aggregation=chart_type != ChartType.SCATTER
-            ),
-            filters=wrap_if_not_list(json_data.get("filters", [])),
-            color=json_data.get("color") or None,
-            bar_mode=BarMode(json_data["bar_mode"])
-            if json_data.get("bar_mode")
-            else None,
-            sort_criteria=SortingCriteria(json_data["sort_criteria"])
-            if json_data.get("sort_criteria")
-            else None,
-            sort_order=SortOrder(json_data["sort_order"])
-            if json_data.get("sort_order")
-            else None,
-            horizontal=json_data.get("horizontal"),
-            limit=json_data.get("limit"),
-        )
+        if chart_type == ChartType.SCATTER:
+            if json_data["y"].get("aggregation"):
+                del json_data["y"]["aggregation"]
+        else:
+            if not json_data["y"].get("column"):
+                json_data["y"]["aggregation"] = AggregationType.COUNTROWS.value
+            elif json_data["y"].get("aggregation") == AggregationType.COUNTROWS.value:
+                json_data["y"]["aggregation"] = AggregationType.COUNT.value
+
+        if json_data.get("filters") is None:
+            json_data["filters"] = []
+        else:
+            json_data["filters"] = wrap_if_not_list(json_data["filters"])
+
+        return json_data
 
 
 def get_schema_of_chart_config(
