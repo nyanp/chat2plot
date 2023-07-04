@@ -51,7 +51,7 @@ def initialize_logger():
 if "logger" not in st.session_state:
     st.session_state["logger"] = initialize_logger()
 
-api_key = st.text_input("Step1: Input your OpenAI API-KEY", value="")
+api_key = st.text_input("Step1: Input your OpenAI API-KEY", value="", type="password")
 csv_file = st.file_uploader("Step2: Upload csv file", type={"csv"})
 
 if api_key and csv_file:
